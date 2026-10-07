@@ -1,11 +1,11 @@
-# Progetto Specializzazione — ROS2 + CUDA + ML per il mercato svizzero
+# Progetto Specializzazione — ROS2 + CUDA + ML
 ## Percorso "da zero", costruito pezzo per pezzo, per portfolio GitHub/LinkedIn
 
 **Obiettivo:** un **braccio robotico simulato (6 DOF con polso sferico)** controllato da
 gesti della mano, con percezione CUDA-accelerata e cinematica inversa scritta da me —
 un progetto unico e coerente (non tre progetti separati) che dimostri l'intreccio di
-C++/CUDA, ROS2 e ML, esattamente le competenze richieste per ruoli robotica/automazione
-in Svizzera.
+C++/CUDA, ROS2 e ML, esattamente le competenze richieste per ruoli di robotica e
+automazione.
 
 **Cambio di rotta (30/09/2026):** il robot mobile con percorso a ostacoli è sostituito dal
 braccio, per collegare il progetto al corso di robotica industriale (cinematica del
