@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.so
+models/*.pth
+data/
+python/src_old/
+.vscode/
