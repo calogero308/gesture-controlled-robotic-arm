@@ -1,147 +1,148 @@
 # Progetto Specializzazione — ROS2 + CUDA + ML per il mercato svizzero
 ## Percorso "da zero", costruito pezzo per pezzo, per portfolio GitHub/LinkedIn
 
-**Obiettivo:** un robot simulato che attraversa un percorso a ostacoli guidato da
-comandi gestuali della mano, con percezione CUDA-accelerata — un progetto unico e
-coerente (non tre progetti separati) che dimostri l'intreccio di C++/CUDA, ROS2 e ML,
-esattamente le competenze richieste per ruoli robotica/automazione in Svizzera.
+**Obiettivo:** un **braccio robotico simulato (6 DOF con polso sferico)** controllato da
+gesti della mano, con percezione CUDA-accelerata e cinematica inversa scritta da me —
+un progetto unico e coerente (non tre progetti separati) che dimostri l'intreccio di
+C++/CUDA, ROS2 e ML, esattamente le competenze richieste per ruoli robotica/automazione
+in Svizzera.
 
-**Evitamento ostacoli:** reattivo (non appreso) nella v1. La sostituzione con una
-policy di Reinforcement Learning è pianificata come v2, per coincidere con il corso
-di RL del prossimo semestre — vedi README del progetto per i dettagli.
+**Cambio di rotta (30/09/2026):** il robot mobile con percorso a ostacoli è sostituito dal
+braccio, per collegare il progetto al corso di robotica industriale (cinematica del
+polso sferico). Tutta la pipeline CUDA + ML resta identica: cambia solo cosa riceve il
+comando finale. Movimenti semplici (destra/sinistra/su/giù), ma **calcolati al volo**
+con cinematica inversa (disaccoppiamento posizione/orientamento), non posizioni
+pre-salvate.
+
+**Reinforcement Learning:** rimandato a una v2, per coincidere con il corso di RL del
+prossimo semestre. Da ridefinire per il caso braccio — vedi README.
 
 **Hardware:** RTX 5050 (8GB VRAM), 32GB RAM, i7 — più che sufficiente per l'intero progetto.
 
 **Regola del percorso:** ogni pezzo scritto da zero (niente copia di tutorial/repo
-esistenti), commit progressivi visibili su GitHub, non un unico commit finale.
+esistenti; il dataset pubblico è ammesso, il codice no), commit progressivi visibili su
+GitHub, non un unico commit finale.
 
 ---
 
-## Checklist ambiente — cosa ho, cosa manca
+## Checklist ambiente
 
-| Componente | Stato al 15/09/2026 | Quando serve |
+| Componente | Stato al 07/10/2026 | Quando serve |
 |---|---|---|
-| CUDA Toolkit (nvcc 12.6) | ✅ Già installato | Da subito |
-| Python 3.12 + pip | ✅ Già installato | Da subito |
-| Ubuntu 24.04 (WSL) | ✅ Confermato | — |
-| ROS2 Jazzy | ❌ Da installare | Fase 3 |
-| PyTorch (con supporto CUDA) | ❌ Da installare | Fase 4 |
-| OpenCV | ❌ Da installare | Fase 2-4 |
+| CUDA Toolkit (nvcc 12.6) | ✅ Installato | — |
+| Python 3.12 + pip | ✅ Installato | — |
+| Ubuntu 24.04 (WSL2) | ✅ Confermato | — |
+| Docker Desktop + GPU passthrough | ✅ Verificato | Fase 3 |
+| PyTorch (build cu130, per RTX 5050 / sm_120) | ✅ Installato | — |
+| OpenCV | ✅ Installato | — |
+| ROS2 Jazzy | ❌ Da installare (sessione dedicata, 2-4 h stimate) | Fase 3 |
 | Gazebo | ❌ Da installare | Fase 5 |
 
-Stima download totale rimanente: ~5-5.5 GB (ROS2 desktop ~2.5-3GB, PyTorch ~2-2.5GB,
-OpenCV+resto ~300-500MB, Gazebo quando serve ~1-1.5GB).
+---
+
+## FASE 1 — Preprocessing immagini in CUDA puro ✅ COMPLETATA
+
+- [x] **Kernel di resize** (nearest neighbor, `unsigned char`, scale factor in `float`)
+- [x] **Kernel di normalizzazione** (0-255 → 0.0-1.0, indicizzazione 1D)
+- [x] **Kernel di conversione layout** HWC → CHW
+- [x] Verifica di correttezza con confronto CPU nel `main` di test
+- [x] Pulizia memoria (host + device) verificata
+
+**Nota tecnica:** quando due kernel si incatenano con tipi diversi (`unsigned char` →
+`float`), ogni buffer va allocato con la `size_t` calcolata sul *proprio* tipo.
 
 ---
 
-## FASE 1 — Preprocessing immagini in CUDA puro (in corso, zero installazioni nuove)
+## FASE 2 — Binding Python e OpenCV ✅ COMPLETATA (con un punto aperto)
 
-Nessuna dipendenza esterna oltre a quello già presente. Obiettivo: costruire i kernel
-che serviranno da ponte tra "immagine grezza" e "input pronto per il modello ML",
-riusabili indipendentemente da quale libreria ML si userà poi.
-
-- [x] **Kernel di resize** — ridimensiona un'immagine da una risoluzione a un'altra
-      (nearest neighbor). Tipi: `unsigned char*` in ingresso/uscita (fedele al
-      formato reale di un'immagine 8-bit, non `float` come nel primo tentativo),
-      scale factor e coordinate intermedie sempre in `float` per evitare che il
-      resize degeneri in un crop. Verificato con controllo automatico su tutti i
-      pixel (confronto con formula ricalcolata sulla CPU) — nessun mismatch.
-- [x] **Kernel di normalizzazione** — porta i valori pixel da 0-255 (`unsigned char`)
-      a 0.0-1.0 (`float`). Indicizzazione 1D (nessuna larghezza/altezza necessaria,
-      a differenza del resize). Collegato in catena diretta dopo il resize (il
-      buffer di output del resize diventa l'input della normalizzazione, stesso
-      `main`, senza passaggi intermedi). Eseguito senza crash dopo la correzione
-      della dimensione di allocazione device (era calcolata sul tipo sbagliato).
-- [ ] **Kernel di conversione layout** — da HWC (height-width-channel) a CHW
-      (concettualmente simile alla trasposizione di matrice già fatta per l'esame)
-- [x] Verifica di correttezza — fatta per il resize (confronto CPU su tutti i pixel);
-      normalizzazione verificata solo per esecuzione senza errori, non ancora con
-      un controllo numerico esplicito (da aggiungere se si riprende in mano il file)
-- [x] Pulizia memoria (host + device) per entrambi i kernel — verificata completa
-
-**Prossimo compito concreto:** kernel di conversione layout HWC→CHW.
-
-**Nota tecnica da ricordare:** quando due kernel si incatenano con tipi diversi
-lungo la pipeline (qui: resize in `unsigned char` seguito da normalizzazione che
-produce `float`), ogni buffer va allocato con la `size_t` calcolata sul *proprio*
-tipo — un errore fatto una volta in questo progetto è stato riusare la size di un
-buffer `unsigned char` per allocare quello `float` corrispondente, causando
-un'allocazione troppo piccola (e potenziale accesso fuori dai limiti).
+- [x] Installare OpenCV Python
+- [x] Wrapper `extern "C"` (`cuda_wrappers.cu`, compilato in `.so`) e binding con `ctypes`
+- [x] `process_image`: resize → normalize → HWC→CHW interamente sulla GPU, verificato su
+      una foto reale
+- [ ] Confronto numerico con `cv2.resize` / normalizzazione OpenCV (finora solo
+      verifica visiva) — da fare nell'integrazione, insieme al punto resize della Fase 4
 
 ---
 
-## FASE 2 — Introduzione a OpenCV (installazione minima)
+## FASE 3 — ROS2 puro (Docker + ROS2 Jazzy) ⏸ RIMANDATA
 
-Solo quando la Fase 1 è solida. Serve per caricare immagini vere (non più solo dati
-sintetici) e confrontare il proprio kernel di preprocessing con l'equivalente OpenCV,
-per validare che il proprio codice CUDA produca risultati corretti su dati reali.
+Sessione dedicata. Nessun collegamento con CUDA/ML: solo il meccanismo di comunicazione.
 
-- [ ] Installare OpenCV Python (`pip install opencv-python`)
-- [ ] Caricare un'immagine reale, passarla al proprio kernel CUDA (via Python
-      binding o semplice scambio file, da decidere insieme quando ci si arriva)
-- [ ] Confrontare l'output del proprio kernel con `cv2.resize`/normalizzazione OpenCV
+- [ ] Dockerfile unico ROS2 + CUDA, GPU visibile nel container
+- [ ] Nodo "hello world": publisher/subscriber, capire bene il meccanismo
+- [ ] Nodo "camera finta": publisher di immagini (`sensor_msgs/Image`)
+- [ ] Nodo "subscriber immagine": riceve e verifica il canale
 
 ---
 
-## FASE 3 — ROS2 puro (installazione ROS2 Jazzy)
+## FASE 4 — Riconoscimento gesti della mano ✅ MODELLO COMPLETATO, integrazione da fare
 
-Nessun collegamento ancora con CUDA/ML — solo il meccanismo di comunicazione.
+**Gesti (5 classi, dataset HaGRID):** fist, like, palm, peace, rock — 34.603 immagini.
+Mappatura gesto → comando del braccio: da definire.
 
-- [ ] Installare ROS2 Jazzy Desktop (comandi già pronti quando si arriva qui)
-- [ ] Nodo "hello world": un publisher che manda numeri incrementali, un subscriber
-      che li riceve e stampa — capire bene il meccanismo pub/sub prima di aggiungere
-      complessità
-- [ ] Nodo "camera finta": un publisher che pubblica un'immagine statica (o un frame
-      da webcam) a intervalli regolari, sul formato messaggio giusto per immagini
-      (`sensor_msgs/Image`)
-- [ ] Nodo "subscriber immagine": riceve l'immagine pubblicata e la salva/stampa le
-      dimensioni, per verificare che il canale funzioni
+- [x] PyTorch con supporto CUDA (`torch.cuda.is_available()` = True)
+- [x] Dataset pubblico HaGRID, filtrato su 5 classi
+- [x] `dataset.py`: ImageFolder, split 80/20 (seed 42), augmentation (rotazione ±15°,
+      luminosità/contrasto)
+- [x] `train.py`: MobileNetV2 pretrained, validazione ad ogni epoca, checkpoint migliore
+      - backbone congelato: **74%** (underfitting)
+      - fine-tuning degli ultimi blocchi (`features[15:]`, lr 1e-4 sul backbone e 1e-3
+        sul layer finale): **97.3%** val acc
+- [x] `evaluate.py`: matrice di confusione — errore principale peace↔rock (90 errori su 184)
+- [x] `inference.py`: ricostruisce il modello, carica `models/best_model_finetuned.pth`,
+      restituisce gesto e confidenza
+- [x] Test su foto personali (`data/test/`): **14/15 corrette**. Errore: un `rock` letto
+      come `like` al 96% di confidenza (foto dal basso, mignolo non visibile, pollice
+      esteso, volto dominante nell'inquadratura). Peace e rock restano i gesti più deboli.
+- [ ] **Integrazione con la pipeline CUDA** — tre disallineamenti da sistemare:
+      1. normalizzazione: il training usa `(x - mean) / std` di ImageNet, il
+         `normalize_kernel` fa solo `x / 255`
+      2. ordine dei canali: OpenCV legge BGR, il training è RGB
+      3. resize: nearest-neighbor nel kernel contro bilineare in torchvision —
+         verifica numerica
+- [ ] Ritaglio della mano (o regione fissa): il dataset contiene ritagli stretti, con
+      scene intere l'accuratezza cala
+- [ ] Benchmark: tempo di inferenza con/senza preprocessing CUDA custom
+- [ ] (Miglioramenti futuri del modello) augmentation più aggressiva (zoom/ritaglio
+      casuale, prospettiva), più epoche, eventuali foto proprie nel training; voto a
+      maggioranza su più frame per ridurre gli errori sporadici
+
+**Note tecniche da ricordare:**
+- Congelare tutto il backbone non bastava: servivano gli ultimi blocchi sbloccati.
+- Non mettere cartelle extra (es. `test/`) dentro la radice letta da `ImageFolder`: verrebbero
+  contate come classi aggiuntive e romperebbero il training (il layer finale ha 5 uscite).
+- Una confidenza alta non garantisce una predizione corretta: la soglia da sola non basta.
 
 ---
 
-## FASE 4 — Riconoscimento gesti della mano, in inferenza (installazione PyTorch)
+## FASE 5 — Braccio robotico e integrazione completa in ROS2
 
-Set di gesti da definire (indicativamente 4-5: avanti, stop, sinistra, destra, +
-eventuale "modalità" extra) — meno gesti = training più veloce e affidabile per
-iniziare, espandibile in seguito.
-
-- [ ] Installare PyTorch con supporto CUDA (`torch.cuda.is_available()` deve dare `True`)
-- [ ] Raccogliere/generare un piccolo dataset di immagini per gesto (webcam propria)
-- [ ] Allenare un classificatore semplice sui gesti definiti (il rilevamento dei
-      keypoint della mano può appoggiarsi a uno strumento esistente come MediaPipe,
-      ma la classificazione del gesto sopra quei keypoint è lavoro proprio)
-- [ ] Sostituire il preprocessing "standard" con i propri kernel CUDA della Fase 1
-      (qui i due pezzi iniziano davvero a intrecciarsi)
-- [ ] Misurare e confrontare il tempo di inferenza con/senza il preprocessing custom
-
----
-
-## FASE 5 — Integrazione completa in un package ROS2
-
-Tutto insieme: il pezzo che rende il progetto "uno", non tre cose affiancate.
-
-- [ ] Nodo camera (Fase 3) → nodo inferenza gesti (Fase 4, preprocessing CUDA +
-      modello) → nodo controllo robot (traduce il gesto in comando di movimento)
-- [ ] Package ROS2 strutturato correttamente (CMakeLists.txt o setup.py, package.xml)
-- [ ] Mondo Gazebo con percorso a ostacoli (alcuni box/oggetti posizionati)
-- [ ] Evitamento ostacoli reattivo (basato su sensori del robot, non appreso — la
-      versione appresa è pianificata come v2, vedi README)
+- [ ] Definire i parametri DH del braccio (6 DOF, polso sferico) — scelti da me
+- [ ] Cinematica diretta (verifica) e **cinematica inversa analitica** con disaccoppiamento
+      posizione/orientamento, scritta da zero
+- [ ] Mappatura gesto → delta cartesiano (destra/sinistra/su/giù); IK calcolata al volo
+- [ ] Modello URDF/Xacro del braccio, simulazione in Gazebo con `ros2_control`
+- [ ] Nodo camera → nodo inferenza gesti (preprocessing CUDA + modello) → nodo controllo
+      braccio (gesto → delta → IK → comandi ai giunti)
+- [ ] Package ROS2 strutturato (CMakeLists.txt o setup.py, package.xml)
 
 ---
 
 ## FASE 6 — Rifinitura portfolio
 
-- [ ] README che racconta la storia: problema → scelte tecniche → perché quella
-      scelta (non solo "cosa fa" il codice)
-- [ ] Commit history pulita e progressiva (verificabile: non un solo commit gigante)
-- [ ] Se possibile, una gif/video breve del sistema in azione (Gazebo o webcam reale)
+- [ ] README aggiornato: braccio al posto del robot mobile, risultati ML (74% → 97.3%),
+      limiti noti (peace/rock, dominio ritagli), storia delle scelte
+- [ ] Commit Git progressivi per blocco (ML, integrazione, braccio) con `.gitignore` per
+      `models/*.pth`, `gesti_estratti/`, `data/`
+- [ ] Gif/video breve del sistema in azione
 - [ ] Collegamento del repository su LinkedIn/CV, con una riga che spiega
-      esplicitamente l'intreccio C++/CUDA + ROS2 + ML
+      l'intreccio C++/CUDA + ROS2 + ML + cinematica
 
 ---
 
-## Note aperte da chiarire strada facendo
+## Note aperte
 
-- Numero e set esatto di gesti da riconoscere (indicativamente 4-5)
-- Se procedere con webcam reale o solo immagini statiche/dataset per i test dei gesti
+- Mappatura esatta gesto → direzione/azione del braccio (5 gesti disponibili)
+- Parametri DH: braccio inventato da me o ispirato a un modello reale
+- Webcam reale (accesso da WSL2 non immediato) o camera simulata in Gazebo
 - Nome definitivo del progetto e del repository
