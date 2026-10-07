@@ -35,6 +35,7 @@ GitHub, non un unico commit finale.
 | Docker Desktop + GPU passthrough | ✅ Verificato | Fase 3 |
 | PyTorch (build cu130, per RTX 5050 / sm_120) | ✅ Installato | — |
 | OpenCV | ✅ Installato | — |
+| `huggingface_hub` (solo per lo script di download del dataset) | ✅ Usato | — |
 | ROS2 Jazzy | ❌ Da installare (sessione dedicata, 2-4 h stimate) | Fase 3 |
 | Gazebo | ❌ Da installare | Fase 5 |
 
@@ -42,8 +43,11 @@ GitHub, non un unico commit finale.
 
 ## FASE 1 — Preprocessing immagini in CUDA puro ✅ COMPLETATA
 
-- [x] **Kernel di resize** (nearest neighbor, `unsigned char`, scale factor in `float`)
-- [x] **Kernel di normalizzazione** (0-255 → 0.0-1.0, indicizzazione 1D)
+- [x] **Kernel di resize** (nearest neighbor, `unsigned char`, scale factor in `float`) —
+      poi affiancato in Fase 4 da `resize_area_kernel` (media dell'area), che è quello
+      usato dalla pipeline
+- [x] **Kernel di normalizzazione** (0-255 → 0.0-1.0, indicizzazione 1D) — esteso in Fase 4
+      con mean/std ImageNet per canale
 - [x] **Kernel di conversione layout** HWC → CHW
 - [x] Verifica di correttezza con confronto CPU nel `main` di test
 - [x] Pulizia memoria (host + device) verificata
@@ -53,14 +57,14 @@ GitHub, non un unico commit finale.
 
 ---
 
-## FASE 2 — Binding Python e OpenCV ✅ COMPLETATA (con un punto aperto)
+## FASE 2 — Binding Python e OpenCV ✅ COMPLETATA
 
 - [x] Installare OpenCV Python
 - [x] Wrapper `extern "C"` (`cuda_wrappers.cu`, compilato in `.so`) e binding con `ctypes`
 - [x] `process_image`: resize → normalize → HWC→CHW interamente sulla GPU, verificato su
       una foto reale
-- [ ] Confronto numerico con `cv2.resize` / normalizzazione OpenCV (finora solo
-      verifica visiva) — da fare nell'integrazione, insieme al punto resize della Fase 4
+- [x] Confronto numerico: fatto contro la pipeline torchvision del training (il
+      riferimento che conta per il modello), non contro `cv2.resize` — vedi Fase 4
 
 ---
 
@@ -75,10 +79,12 @@ Sessione dedicata. Nessun collegamento con CUDA/ML: solo il meccanismo di comuni
 
 ---
 
-## FASE 4 — Riconoscimento gesti della mano ✅ MODELLO COMPLETATO, integrazione da fare
+## FASE 4 — Riconoscimento gesti e integrazione con CUDA ✅ COMPLETATA (restano ritaglio mano e miglioramenti futuri)
 
 **Gesti (5 classi, dataset HaGRID):** fist, like, palm, peace, rock — 34.603 immagini.
 Mappatura gesto → comando del braccio: da definire.
+
+### Modello
 
 - [x] PyTorch con supporto CUDA (`torch.cuda.is_available()` = True)
 - [x] Dataset pubblico HaGRID, filtrato su 5 classi
@@ -94,24 +100,69 @@ Mappatura gesto → comando del braccio: da definire.
 - [x] Test su foto personali (`data/test/`): **14/15 corrette**. Errore: un `rock` letto
       come `like` al 96% di confidenza (foto dal basso, mignolo non visibile, pollice
       esteso, volto dominante nell'inquadratura). Peace e rock restano i gesti più deboli.
-- [ ] **Integrazione con la pipeline CUDA** — tre disallineamenti da sistemare:
-      1. normalizzazione: il training usa `(x - mean) / std` di ImageNet, il
-         `normalize_kernel` fa solo `x / 255`
-      2. ordine dei canali: OpenCV legge BGR, il training è RGB
-      3. resize: nearest-neighbor nel kernel contro bilineare in torchvision —
-         verifica numerica
-- [ ] Ritaglio della mano (o regione fissa): il dataset contiene ritagli stretti, con
-      scene intere l'accuratezza cala
-- [ ] Benchmark: tempo di inferenza con/senza preprocessing CUDA custom
+
+### Integrazione con la pipeline CUDA (07/10/2026)
+
+- [x] `cuda_preprocess.py`: binding Python con controlli su dtype, shape (H, W, 3) e
+      contiguità dell'array prima di passare i puntatori alla GPU
+- [x] I tre disallineamenti sistemati:
+      1. normalizzazione: `normalize_kernel` ora applica `(x/255 - mean[c]) / std[c]` di
+         ImageNet per canale (`c = id % channels`); nessun calo di accuratezza rispetto
+         alla pipeline torchvision
+      2. ordine dei canali: la pipeline CUDA si aspetta RGB (come il training). I frame
+         OpenCV (BGR) vanno convertiti all'acquisizione: da applicare nel nodo camera,
+         non ancora testato con una webcam reale
+      3. resize: il nearest-neighbor (campionamento all'angolo del pixel, mentre PIL
+         campiona al centro) dava un errore medio di 0.038 contro il bilineare con
+         antialias di torchvision su una foto 1200×1600; sostituito con
+         `resize_area_kernel` (media dell'area sorgente per ogni pixel di uscita):
+         errore medio 0.004
+- [x] Confronto numerico con torchvision (`compare_preprocessing.py`, `compare_batch.py`):
+      su 500 immagini di validation **stessa classe in 495/500**, accuratezza **97.4%**
+      (CUDA) contro 97.6% (torchvision), cioè 1 immagine di differenza
+- [x] Benchmark (`benchmark.py`, RTX 5050 Laptop, 3 run, immagini sintetiche, mediana di
+      200 ripetizioni dopo riscaldamento). Forward del modello: ~2.7 ms.
+
+      | Input | CPU (ms) | CUDA (ms) | Speedup |
+      |---|---|---|---|
+      | 512×512 | 1.1–1.3 | 0.9–1.0 | 1.0×–1.3× |
+      | 640×480 | 1.4–1.6 | 0.8–0.9 | 1.5×–1.9× |
+      | 1920×1080 | 5.1–5.5 | 1.3–1.4 | 3.8×–4.2× |
+
+      Il tempo CUDA cresce poco con la risoluzione: probabile costo fisso per chiamata
+      (cudaMalloc/cudaFree, copie, sincronizzazioni) — inferenza, non ancora profilato.
+- [x] README riscritto per il braccio, con risultati e limiti (vedi Fase 6)
+
+### Ancora aperto
+
+- [ ] **Ritaglio della mano (ROI)** davanti al classificatore: il dataset contiene
+      ritagli stretti, con scene intere l'accuratezza cala (confermato: una foto intera
+      `rock2` è letta `like` al 96% da entrambe le pipeline, quindi non è colpa del
+      preprocessing)
 - [ ] (Miglioramenti futuri del modello) augmentation più aggressiva (zoom/ritaglio
       casuale, prospettiva), più epoche, eventuali foto proprie nel training; voto a
       maggioranza su più frame per ridurre gli errori sporadici
+- [ ] (Ottimizzazioni CUDA, v2) buffer GPU persistenti invece di allocarli a ogni
+      chiamata, memoria host pinned, meno sincronizzazioni; eventuale kernel bilineare
+      con antialias per chiudere il gap residuo con torchvision; profilazione con `nsys`
+- [ ] Ispezionare i 5 casi su 500 in cui le due pipeline divergono (probabilmente casi
+      al limite peace/rock)
+- [ ] Testare il nuovo `download_dataset.py` (download ed estrazione non ancora provati)
+- [ ] Pulizia: `python/test_resize.py` ha percorsi relativi vecchi; `cuda/resize_kernel.cu`
+      duplica i kernel di `cuda_wrappers.cu` (serve come test standalone)
 
 **Note tecniche da ricordare:**
 - Congelare tutto il backbone non bastava: servivano gli ultimi blocchi sbloccati.
 - Non mettere cartelle extra (es. `test/`) dentro la radice letta da `ImageFolder`: verrebbero
   contate come classi aggiuntive e romperebbero il training (il layer finale ha 5 uscite).
 - Una confidenza alta non garantisce una predizione corretta: la soglia da sola non basta.
+- Rilanciare `train.py` sovrascrive il checkpoint in `models/` (il salvataggio parte da
+  `best_val_acc = 0`): copiare prima quello attuale.
+- Con fattori di riduzione alti (es. 1200×1600 → 224×224) il nearest-neighbor fa aliasing:
+  ogni pixel di uscita guarda 1 pixel su decine. Il confronto utile è sempre con la
+  pipeline usata in training, non con una formula "ideale".
+- Il tempo di una misura dipende dalle dimensioni: la pipeline CUDA conviene dal 640×480 in
+  su; a 512×512 è alla pari con la CPU.
 
 ---
 
@@ -130,10 +181,16 @@ Mappatura gesto → comando del braccio: da definire.
 
 ## FASE 6 — Rifinitura portfolio
 
-- [ ] README aggiornato: braccio al posto del robot mobile, risultati ML (74% → 97.3%),
-      limiti noti (peace/rock, dominio ritagli), storia delle scelte
-- [ ] Commit Git progressivi per blocco (ML, integrazione, braccio) con `.gitignore` per
-      `models/*.pth`, `gesti_estratti/`, `data/`
+- [x] README aggiornato: braccio al posto del robot mobile, risultati ML (74% → 97.3%),
+      limiti noti (peace/rock, dominio ritagli), risultati dell'integrazione CUDA e
+      benchmark
+- [x] `.gitignore` per `models/*.pth`, `data/`, `*.so`
+- [x] Commit Git progressivi per blocco (ML, integrazione CUDA, benchmark, README) —
+      da proseguire per le fasi successive (braccio)
+- [ ] **Push su GitHub** (GitHub Desktop dava errore 500 / problema di login): creare il
+      repo vuoto, repo privato finché non si è controllato che nessuna foto personale sia
+      tracciata (`data/` è ignorata) e deciso l'email dei commit (noreply) prima di
+      renderlo pubblico
 - [ ] Gif/video breve del sistema in azione
 - [ ] Collegamento del repository su LinkedIn/CV, con una riga che spiega
       l'intreccio C++/CUDA + ROS2 + ML + cinematica
@@ -145,4 +202,5 @@ Mappatura gesto → comando del braccio: da definire.
 - Mappatura esatta gesto → direzione/azione del braccio (5 gesti disponibili)
 - Parametri DH: braccio inventato da me o ispirato a un modello reale
 - Webcam reale (accesso da WSL2 non immediato) o camera simulata in Gazebo
+- Come ottenere il ritaglio della mano: regione fissa, detector leggero o segmentazione
 - Nome definitivo del progetto e del repository
