@@ -37,24 +37,80 @@ __global__ void resize_kernel(unsigned char *input, unsigned char *output,
 
 
 
-__global__ void normalize_kernel(unsigned char *inPixels, float *outPixels, int totPixels){
+__global__ void resize_area_kernel(unsigned char *input, unsigned char *output, 
+                              int srcWidth, int srcHeight, int channels,
+                              int dstWidth, int dstHeight){
+
+    // Calcolo indice del thread
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idy = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Scala di resize dell'immagine
+    float scaleX = (float)srcWidth / dstWidth;        
+    float scaleY = (float)srcHeight / dstHeight;
+
+    int xStart = (int)floorf(idx * scaleX);        
+    int xEnd   = (int)ceilf((idx + 1) * scaleX);   
+    
+    int yStart = (int)floorf(idy * scaleY);
+    int yEnd   = (int)ceilf((idy + 1) * scaleY);
+
+        // Overflow check
+    if(idx < dstWidth && idy < dstHeight){
+
+        // Il blocco non deve uscire dall'immagine sorgente
+        if(xEnd > srcWidth)  xEnd = srcWidth;
+        if(yEnd > srcHeight) yEnd = srcHeight;
+
+        // Ciclo per i canali
+        for(int c = 0; c < channels; c++){
+
+            int sum = 0;     // somma dei valori del blocco
+            int count = 0;   // quanti pixel ci sono nel blocco
+
+            for(int y = yStart; y < yEnd; y++){
+                for(int x = xStart; x < xEnd; x++){
+
+                    // Calcolo della somma dei Pixel
+                    sum += input[(y * srcWidth + x) * channels + c];
+                    count++;
+
+                }
+            }
+
+            output[(idy * dstWidth + idx) * channels + c] = (unsigned char)(sum / (float)count + 0.5f);
+
+        }
+    }
+    
+
+}
+
+
+
+
+__global__ void normalize_kernel(unsigned char *inPixels, float *outPixels,
+                                 int totPixels, int channels){
+
+    // Valori ImageNet, gli stessi di config.py (IMAGENET_MEAN / IMAGENET_STD)
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float stdv[3] = {0.229f, 0.224f, 0.225f};
 
     // Calcolo indice
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Overflow check
     if(id < totPixels){
-        
-        // Lettura del pixel
-        unsigned char px = inPixels[id];
 
-        // Normalizzazione e conversione
-        float pxNorm = (float)(px) / 255.0f;
+        // BUCO: a quale canale appartiene questo valore?
+        int c = id % channels;
+
+        // Normalizzazione: scala in [0,1], poi sottrae la media e divide per la deviazione standard
+        float pxNorm = ((float)inPixels[id] / 255.0f - mean[c]) / stdv[c];
 
         // Scrittura sul vettore di output
         outPixels[id] = pxNorm;
     }
-
 }
 
 
@@ -117,7 +173,7 @@ extern "C" void process_image(unsigned char* h_input, float* h_output,
                        (dstHeight + threadsPerBlock.y - 1) / threadsPerBlock.y); 
 
     // Chiamata al kernel di resize
-    resize_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_matIn, d_matOut, 
+    resize_area_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_matIn, d_matOut, 
                                                       srcWidth, srcHeight, channels,
                                                       dstWidth, dstHeight);
 
@@ -129,7 +185,7 @@ extern "C" void process_image(unsigned char* h_input, float* h_output,
     int blocksPerGridNorm = (totPixels + threadsPerBlockNorm - 1) / threadsPerBlockNorm;
 
     // Chiamata al kernel di normalizzazione
-    normalize_kernel<<<blocksPerGridNorm, threadsPerBlockNorm>>>(d_matOut, d_matNorm, totPixels);
+    normalize_kernel<<<blocksPerGridNorm, threadsPerBlockNorm>>>(d_matOut, d_matNorm, totPixels, channels);
 
     // Sincronizzazione tra CPU e GPU
     cudaDeviceSynchronize();
