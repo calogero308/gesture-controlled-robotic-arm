@@ -25,6 +25,9 @@ DATASET_ROOT = DATA_DIR / "hagrid" / "hagrid-classification-512p-no-gesture-150k
 MODELS_DIR = PROJECT_ROOT / "models"
 BEST_MODEL_PATH = MODELS_DIR / "best_model_finetuned.pth"
 
+# Path per l'ottenimento della libreria di interfaccia con CUDA
+CUDA_LIB_PATH = PROJECT_ROOT / "cuda" / "cuda_wrappers.so"
+
 # --- Classi ---
 # Ordine alfabetico = ordine con cui ImageFolder assegna gli indici 0..4.
 CLASSES = ["fist", "like", "palm", "peace", "rock"]
