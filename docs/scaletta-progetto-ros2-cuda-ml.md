@@ -187,10 +187,11 @@ Mappatura gesto → comando del braccio: da definire.
 - [x] `.gitignore` per `models/*.pth`, `data/`, `*.so`
 - [x] Commit Git progressivi per blocco (ML, integrazione CUDA, benchmark, README) —
       da proseguire per le fasi successive (braccio)
-- [ ] **Push su GitHub** (GitHub Desktop dava errore 500 / problema di login): creare il
-      repo vuoto, repo privato finché non si è controllato che nessuna foto personale sia
-      tracciata (`data/` è ignorata) e deciso l'email dei commit (noreply) prima di
-      renderlo pubblico
+- [x] **Push su GitHub** (08/10/2026). Controllato: nessuna immagine, modello, dataset o
+      `.so` né nei file attuali né nella cronologia (`data/` è ignorata)
+- [ ] Prima di rendere il repo **pubblico**: confermare che sia privato nel frattempo e
+      decidere l'email dei commit (noreply); cambiarla nei commit già fatti richiede di
+      riscrivere la cronologia e un push forzato
 - [ ] Gif/video breve del sistema in azione
 - [ ] Collegamento del repository su LinkedIn/CV, con una riga che spiega
       l'intreccio C++/CUDA + ROS2 + ML + cinematica
