@@ -79,7 +79,7 @@ Sessione dedicata. Nessun collegamento con CUDA/ML: solo il meccanismo di comuni
 
 ---
 
-## FASE 4 — Riconoscimento gesti e integrazione con CUDA ✅ COMPLETATA (restano ritaglio mano e miglioramenti futuri)
+## FASE 4 — Riconoscimento gesti e integrazione con CUDA ✅ COMPLETATA (restano detector della mano, webcam live e miglioramenti futuri)
 
 **Gesti (5 classi, dataset HaGRID):** fist, like, palm, peace, rock — 34.603 immagini.
 Mappatura gesto → comando del braccio: da definire.
@@ -133,12 +133,35 @@ Mappatura gesto → comando del braccio: da definire.
       (cudaMalloc/cudaFree, copie, sincronizzazioni) — inferenza, non ancora profilato.
 - [x] README riscritto per il braccio, con risultati e limiti (vedi Fase 6)
 
+### Ritaglio, sorgente video e filtro temporale (08–11/10/2026)
+
+- [x] **ROI fissa centrale** (`roi.py`: `roi_box`, `crop_roi`, 60% del lato corto). Il
+      dataset contiene ritagli stretti, con scene intere l'accuratezza cala (confermato:
+      una foto intera `rock2` è letta `like` al 96% da entrambe le pipeline, quindi non è
+      colpa del preprocessing). Su 10 foto personali: **9/10 a immagine intera, 10/10 col
+      ritaglio**; campione piccolissimo, frazione stabile tra 50% e 80%. Limite: la mano
+      deve stare dentro il riquadro
+- [x] `demo_image.py` / `demo_folder.py`: confronto immagine intera vs ritaglio, anche su
+      cartella di foto etichettate
+- [x] `camera.py`: generatore `frames(source)` (indice webcam o file video), converte
+      BGR→RGB all'acquisizione, rilascia la sorgente a fine uso
+- [x] `live_demo.py`: ritaglio → preprocessing CUDA → classificatore → filtro, video
+      annotato in `data/videos/out.mp4`. **4.2–4.8 ms/frame** (esclusi decodifica,
+      disegno e scrittura). La webcam non è raggiungibile da WSL2: sviluppo su video
+      registrato, webcam live non ancora provata
+- [x] `gesture_filter.py`: `GestureFilter` con finestra scorrevole (window 7,
+      min_agreement 0.8, min_confidence 0.7); restituisce il gesto stabile oppure `None`
+      ("nessun comando"). Latenza ≈ window/fps (7 frame ≈ 0.23 s). Lo sfarfallio è quasi
+      sparito; durante le transizioni esce `None`. Parametri scelti a occhio su un solo
+      video; con window 10 il risultato era simile ma più lento
+
 ### Ancora aperto
 
-- [ ] **Ritaglio della mano (ROI)** davanti al classificatore: il dataset contiene
-      ritagli stretti, con scene intere l'accuratezza cala (confermato: una foto intera
-      `rock2` è letta `like` al 96% da entrambe le pipeline, quindi non è colpa del
-      preprocessing)
+- [ ] **Detector della mano** al posto della ROI fissa (regione fissa usata per ora;
+      scelta tra detector leggero pretrained, segmentazione o uno scritto da me)
+- [ ] Webcam live (accesso da WSL2: passthrough USB o stream dei frame da Windows)
+- [ ] Validare il filtro su più video; estensioni possibili: isteresi, eventi sui fronti,
+      tempo di mantenimento, voto pesato dalla confidenza, media delle probabilità
 - [ ] (Miglioramenti futuri del modello) augmentation più aggressiva (zoom/ritaglio
       casuale, prospettiva), più epoche, eventuali foto proprie nel training; voto a
       maggioranza su più frame per ridurre gli errori sporadici
@@ -192,7 +215,8 @@ Mappatura gesto → comando del braccio: da definire.
 - [ ] Prima di rendere il repo **pubblico**: confermare che sia privato nel frattempo e
       decidere l'email dei commit (noreply); cambiarla nei commit già fatti richiede di
       riscrivere la cronologia e un push forzato
-- [ ] Gif/video breve del sistema in azione
+- [ ] Gif/video breve del sistema in azione (la demo su video annotato esiste già:
+      `live_demo.py`; da convertire in gif evitando di mostrare il volto)
 - [ ] Collegamento del repository su LinkedIn/CV, con una riga che spiega
       l'intreccio C++/CUDA + ROS2 + ML + cinematica
 
@@ -203,5 +227,8 @@ Mappatura gesto → comando del braccio: da definire.
 - Mappatura esatta gesto → direzione/azione del braccio (5 gesti disponibili)
 - Parametri DH: braccio inventato da me o ispirato a un modello reale
 - Webcam reale (accesso da WSL2 non immediato) o camera simulata in Gazebo
-- Come ottenere il ritaglio della mano: regione fissa, detector leggero o segmentazione
+- Come ottenere il ritaglio della mano oltre la regione fissa: detector leggero o
+  segmentazione
+- Gesto → comando: azione continua finché il gesto resta stabile, o un passo singolo per
+  ogni gesto (il filtro restituisce già `None` nelle transizioni)
 - Nome definitivo del progetto e del repository

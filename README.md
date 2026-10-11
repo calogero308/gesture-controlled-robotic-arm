@@ -11,7 +11,10 @@ The project ties together three areas that are usually studied separately: syste
 | CUDA preprocessing (resize, normalization, HWC→CHW) | Done, verified against torchvision, benchmarked |
 | Python ↔ CUDA binding (`ctypes`) | Done |
 | Gesture classifier (5 classes, MobileNetV2 fine-tuned) | Done — 97.3 % validation accuracy |
-| Hand detection / cropping before the classifier | Not started (see [Limitations](#limitations)) |
+| Fixed central ROI crop before the classifier | Done (basic: the hand must be inside the box) |
+| Video demo (file source, annotated output) | Done; live webcam not tested (WSL2 does not see it) |
+| Temporal gesture filter (majority vote over a window) | Done |
+| Real hand detector (hand anywhere in the frame) | Not started (see [Limitations](#limitations)) |
 | ROS2 nodes, Docker, Gazebo simulation | Not started |
 | 6-DOF arm model (URDF, DH parameters), analytic IK for the spherical wrist | Not started |
 | Gesture → Cartesian delta mapping, full integration | Not started |
@@ -21,7 +24,10 @@ Detailed phases are in [`docs/scaletta-progetto-ros2-cuda-ml.md`](docs/scaletta-
 ## How it works
 
 ```
-camera frame (H×W×3, uint8, RGB)
+camera frame or video (H×W×3, uint8, RGB)        camera.py
+      │
+      ▼
+fixed central ROI crop (60 % of the short side)  roi.py
       │
       ▼
 CUDA pipeline (cuda/cuda_wrappers.cu)
@@ -32,6 +38,9 @@ CUDA pipeline (cuda/cuda_wrappers.cu)
       ▼
 MobileNetV2 classifier (PyTorch) ──► fist | like | palm | peace | rock
       │
+      ▼
+temporal filter (majority vote over 7 frames)    gesture_filter.py
+      │      stable gesture, or None = "no command"
       ▼
 [planned] gesture → Cartesian delta → live inverse kinematics → arm (ROS2)
 ```
@@ -75,9 +84,26 @@ A MobileNetV2 forward pass on one image takes about **2.7 ms** on the same GPU. 
 
 Reproduce with `python3 benchmark.py`.
 
+### Fixed ROI crop
+
+HaGRID classification images are tight hand crops, so a full frame with a small hand is out of distribution. As a first, deliberately simple step, `roi.py` crops a fixed central square (60 % of the shorter side) and the user holds the hand inside it. On 10 of my own photos (5 classes, 2 each, not published), the classifier got **9/10 on the full frame and 10/10 on the crop**. That sample is far too small to be a measurement; the crop fraction was stable between about 50 % and 80 %. The real fix is a hand detector (see below).
+
+### Video demo and temporal filter
+
+`camera.py` yields RGB frames from a video file or a webcam index (OpenCV, BGR→RGB at capture, frames streamed through a generator). `live_demo.py` runs crop → CUDA preprocessing → classifier → filter on each frame and writes an annotated video with the ROI box, the raw prediction and the stable gesture. Per-frame processing (crop + preprocessing + classification) took **4.2–4.8 ms**, excluding video decoding, drawing and encoding.
+
+Raw per-frame predictions flicker, especially while the hand moves between gestures. `GestureFilter` keeps a sliding window of the last 7 predictions (low-confidence ones, below 0.7, count as "none") and outputs a gesture only if at least 80 % of the window agrees; otherwise it outputs `None`, meaning "no command". Transitions therefore produce `None` instead of a wrong gesture. The price is latency of about window / fps (7 frames ≈ 0.23 s at 30 fps). Parameters were tuned by eye on a single short recorded video, so they are untested beyond that.
+
+```bash
+python3 live_demo.py data/videos/gesti1.mp4   # video file
+python3 live_demo.py 0                        # webcam index (not tested)
+```
+
 ## Limitations
 
-- **Domain shift.** HaGRID classification images are tight hand crops. A full camera frame, where the hand is a small part of the image, is misclassified (for example, a photo of a "rock" gesture predicted as `like` with 96 % confidence, identically by both pipelines). A hand detection / ROI step is needed before the classifier, and temporal voting across frames would help with unstable predictions.
+- **Hand must be in the ROI.** The crop is a fixed central box, not a detector: a hand outside it is not seen. A hand detector (a lightweight pretrained one, or my own) is the planned replacement. Full frames without cropping are still misclassified (for example, a photo of a "rock" gesture predicted as `like` with 96 % confidence, identically by both pipelines).
+- **Live webcam not tested.** WSL2 does not expose the webcam; development used recorded video. Options: USB passthrough, or streaming frames from Windows.
+- **Filter parameters** come from one video and have not been validated on more data.
 - **Resize is not bit-identical** to torchvision's antialiased bilinear (see above); accuracy impact on the validation set is within noise, but not zero.
 - **Fixed per-call overhead.** `process_image` allocates and frees GPU buffers on every call. Persistent buffers, pinned host memory and fewer synchronizations are obvious next optimizations; the gain would show mostly at low resolutions.
 - Input must be RGB. OpenCV frames (BGR) have to be converted before calling the pipeline.
@@ -97,6 +123,12 @@ python/src/
   compare_preprocessing.py   single-image comparison CUDA vs torchvision
   compare_batch.py      same comparison over many validation images
   benchmark.py          CPU vs CUDA timing
+  roi.py                fixed central ROI crop
+  camera.py             frame source (video file or webcam), yields RGB
+  gesture_filter.py     temporal filter: stable gesture over a sliding window
+  demo_image.py         classify one image, full frame vs ROI crop
+  demo_folder.py        same over a folder of labelled photos
+  live_demo.py          video demo: crop → CUDA → classifier → filter, annotated output
 python/scripts/         dataset download
 docs/                   roadmap
 ```
@@ -126,6 +158,9 @@ python3 evaluate.py
 python3 inference.py path/to/image.jpg
 python3 compare_batch.py
 python3 benchmark.py
+
+# 5. Video demo (writes an annotated video to data/videos/out.mp4)
+python3 live_demo.py path/to/video.mp4
 ```
 
 ## Planned work
@@ -133,7 +168,7 @@ python3 benchmark.py
 1. Docker image with ROS2 Jazzy and Gazebo; ROS2 nodes for camera, inference and arm control.
 2. 6-DOF arm with spherical wrist: URDF, DH parameters, analytic inverse kinematics (position/orientation decoupling) computed live.
 3. Gesture → Cartesian delta mapping and end-to-end integration in simulation.
-4. Hand detection before the classifier; temporal voting.
+4. Hand detector to replace the fixed ROI; live webcam input; validation of the temporal filter on more video.
 5. Version 2: a Reinforcement Learning component for the arm (to be defined), planned to coincide with a Reinforcement Learning course. Possible hardware actuation layer with an Arduino (micro-ROS or serial bridge).
 
 ## Scope note
