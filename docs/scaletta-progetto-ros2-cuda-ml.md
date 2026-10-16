@@ -14,6 +14,13 @@ comando finale. Movimenti semplici (destra/sinistra/su/giù), ma **calcolati al 
 con cinematica inversa (disaccoppiamento posizione/orientamento), non posizioni
 pre-salvate.
 
+**Scelta del braccio (16/10/2026):** il braccio si costruisce a tappe. **Tappa 1: RRR a 3 gradi
+di libertà** (base con asse verticale + spalla + gomito, assi orizzontali paralleli), che
+posiziona la punta in 3D con comandi cartesiani e cinematica inversa analitica. **Tappa 2:**
+polso sferico (altri 3 giunti) per arrivare ai 6 DOF. L'interfaccia resta la stessa (delta
+cartesiano in ingresso, angoli dei giunti in uscita), quindi il modulo della cinematica
+inversa si sostituisce senza toccare il resto. Scheda completa: `docs/braccio-rrr.md`.
+
 **Reinforcement Learning:** rimandato a una v2, per coincidere con il corso di RL del
 prossimo semestre. Da ridefinire per il caso braccio — vedi README.
 
@@ -81,8 +88,9 @@ Sessione dedicata. Nessun collegamento con CUDA/ML: solo il meccanismo di comuni
 
 ## FASE 4 — Riconoscimento gesti e integrazione con CUDA ✅ COMPLETATA (restano detector della mano, webcam live e miglioramenti futuri)
 
-**Gesti (5 classi, dataset HaGRID):** fist, like, palm, peace, rock — 34.603 immagini.
-Mappatura gesto → comando del braccio: da definire.
+**Gesti:** prima versione a 5 classi (HaGRID: fist, like, palm, peace, rock — 34.603 immagini),
+poi estensione a **19 classi** (vedi sotto). Mappatura gesto → comando del braccio: da
+definire dopo la matrice di confusione del modello a 19 classi.
 
 ### Modello
 
@@ -155,6 +163,33 @@ Mappatura gesto → comando del braccio: da definire.
       sparito; durante le transizioni esce `None`. Parametri scelti a occhio su un solo
       video; con window 10 il risultato era simile ma più lento
 
+### Estensione a 19 classi (16/10/2026)
+
+Motivo: scegliere i gesti del braccio guardando la matrice di confusione invece di
+accontentarsi dei 5 iniziali (due dei quali, peace e rock, si confondono); ottenere una
+classe "nessun gesto" dal modello; avere già un modello più generale per la v2.
+
+- [x] Dataset esteso: 18 gesti + `no_gesture` (call, dislike, fist, four, like, mute,
+      no_gesture, ok, one, palm, peace, peace_inverted, rock, stop, stop_inverted, three,
+      three2, two_up, two_up_inverted). Le classi hanno 6.800–7.400 immagini, tranne
+      `no_gesture` (27.823), limitata a **7.000** con `MAX_IMAGES_PER_CLASS` per non
+      sbilanciare il modello. Totale **132.912** immagini (106.329 training, 26.583
+      validation), verificate con `test_dataset.py`
+- [x] `config.py`: `CLASSES = sorted([...])` (l'ordine alfabetico è quello con cui
+      `ImageFolder` assegna gli indici), `MAX_IMAGES_PER_CLASS`, `NUM_CLASSES` derivato;
+      `BEST_MODEL_PATH` punta a `best_model_19classi.pth`. Il modello a 5 classi è
+      conservato come `best_model_finetuned_5classi.pth`
+- [x] `download_dataset.py` aggiornato (tetto per classe, riuso dello zip già scaricato) e
+      **provato davvero**: zip da 3.6 GB, estrazione di 98.309 nuove immagini
+- [x] `train.py`: stampa l'avanzamento ogni 200 batch con tempo stimato e la durata di ogni
+      epoca (circa 15 min/epoca, 3.323 batch)
+- [ ] Addestramento a 19 classi: **in corso** (5 epoche); risultati da inserire
+- [ ] `evaluate.py`: matrice di confusione e accuratezza per classe
+- [ ] Scelta dei gesti per i 6 comandi + "fermo", in base alla separabilità
+- [ ] Rivalutare ROI, demo su video e filtro con il nuovo modello (`demo_folder.py`,
+      `live_demo.py`)
+- [ ] Aggiornare i numeri del README (97.3% era a 5 classi: non confrontabile)
+
 ### Ancora aperto
 
 - [ ] **Detector della mano** al posto della ROI fissa (regione fissa usata per ora;
@@ -170,20 +205,21 @@ Mappatura gesto → comando del braccio: da definire.
       con antialias per chiudere il gap residuo con torchvision; profilazione con `nsys`
 - [ ] Ispezionare i 5 casi su 500 in cui le due pipeline divergono (probabilmente casi
       al limite peace/rock)
-- [ ] Testare il nuovo `download_dataset.py` (download ed estrazione non ancora provati)
 - [ ] Pulizia: `python/test_resize.py` ha percorsi relativi vecchi; `cuda/resize_kernel.cu`
       duplica i kernel di `cuda_wrappers.cu` (serve come test standalone)
 
 **Note tecniche da ricordare:**
 - Congelare tutto il backbone non bastava: servivano gli ultimi blocchi sbloccati.
 - Non mettere cartelle extra (es. `test/`) dentro la radice letta da `ImageFolder`: verrebbero
-  contate come classi aggiuntive e romperebbero il training (il layer finale ha 5 uscite).
+  contate come classi aggiuntive e romperebbero il training (le uscite del layer finale sono quante le classi).
 - Una confidenza alta non garantisce una predizione corretta: la soglia da sola non basta.
 - Rilanciare `train.py` sovrascrive il checkpoint in `models/` (il salvataggio parte da
   `best_val_acc = 0`): copiare prima quello attuale.
 - Con fattori di riduzione alti (es. 1200×1600 → 224×224) il nearest-neighbor fa aliasing:
   ogni pixel di uscita guarda 1 pixel su decine. Il confronto utile è sempre con la
   pipeline usata in training, non con una formula "ideale".
+- Il checkpoint a 5 classi non è caricabile con la configurazione a 19 (dimensioni del layer
+  finale diverse): per usarlo servirebbe la vecchia `config`.
 - Il tempo di una misura dipende dalle dimensioni: la pipeline CUDA conviene dal 640×480 in
   su; a 512×512 è alla pari con la CPU.
 
@@ -191,14 +227,48 @@ Mappatura gesto → comando del braccio: da definire.
 
 ## FASE 5 — Braccio robotico e integrazione completa in ROS2
 
-- [ ] Definire i parametri DH del braccio (6 DOF, polso sferico) — scelti da me
-- [ ] Cinematica diretta (verifica) e **cinematica inversa analitica** con disaccoppiamento
-      posizione/orientamento, scritta da zero
-- [ ] Mappatura gesto → delta cartesiano (destra/sinistra/su/giù); IK calcolata al volo
-- [ ] Modello URDF/Xacro del braccio, simulazione in Gazebo con `ros2_control`
-- [ ] Nodo camera → nodo inferenza gesti (preprocessing CUDA + modello) → nodo controllo
-      braccio (gesto → delta → IK → comandi ai giunti)
+Scheda di progetto con geometria, formule, limiti e decisioni aperte: `docs/braccio-rrr.md`.
+
+### Tappa 1 — Braccio RRR a 3 DOF (decisione del 16/10/2026)
+
+Proposta di partenza, **non ancora confermata**: `h = 9 cm`, `L1 = 16 cm`, `L2 = 14 cm`;
+θ1 ∈ [−90°, +90°], θ2 ∈ [0°, 90°], θ3 ∈ [−150°, 0°]. Portata 30 cm, quota massima 39 cm,
+raggio minimo 8 cm dalla spalla. Circa il 9% delle combinazioni di angoli porta la punta
+sotto il tavolo: serve un limite `z ≥ 0` nel controllo.
+
+- [ ] Fissare `h`, `L1`, `L2`, limiti e margine sul tavolo in un solo file di
+      configurazione (`arm_config.py`), senza numeri dentro le formule
+- [ ] Cinematica diretta, verificata a mano su pose semplici
+- [ ] **Cinematica inversa analitica** (base: `atan2`; poi 2R planare con la legge dei
+      coseni), scritta da zero; punti irraggiungibili e fuori limiti → nessun movimento.
+      Test obbligatorio: giro completo punta → IK → FK → punta su punti casuali
+- [ ] Jacobiano e singolarità: il determinante del 2R vale `L1·L2·sin θ3`, quindi il braccio
+      steso (θ3 = 0, coincide con la portata massima) è singolare: prevedere un piccolo
+      margine sul limite di θ3
+- [ ] Coppie statiche `g(q)` per dimensionare i servo (stima grossolana: ~2 kg·cm sulla
+      spalla con masse ipotizzate, da rifare con i componenti reali)
+- [ ] Prove di movimento (matplotlib): sequenze di delta, limiti, singolarità, `z ≥ 0`
+- [ ] Mappatura gesto → delta cartesiano (destra, sinistra, su, giù, avanti, indietro, fermo)
+      e modulo `gesture_to_command`, provato su video; decidere comando continuo o a passo
+      singolo
+- [ ] Modello URDF/Xacro a 3 giunti, RViz, poi simulazione in Gazebo con `ros2_control`
+      (inerzie plausibili nei tag `<inertial>`: la dinamica la risolve il simulatore)
+- [ ] Nodo camera → nodo inferenza gesti (preprocessing CUDA + modello + filtro) → nodo
+      controllo braccio (gesto → delta → IK → comandi ai giunti)
 - [ ] Package ROS2 strutturato (CMakeLists.txt o setup.py, package.xml)
+- [ ] (Opzionale) modello CAD in SolidWorks con le stesse misure ed esportazione in URDF;
+      da fare dopo aver fissato i parametri
+
+### Tappa 2 — Polso sferico, 6 DOF
+
+- [ ] Parametri DH del braccio completo, scelti da me
+- [ ] Cinematica inversa con disaccoppiamento posizione/orientamento (la parte di posizione
+      è quella della tappa 1)
+- [ ] Comandi che includono l'orientamento della pinza (da definire)
+
+**Idea post-progetto (non fa parte della roadmap):** braccio fisico stampato in 3D con
+Arduino UNO R4 Minima e servo con alimentazione esterna, collegato tramite ponte seriale o
+una interfaccia hardware di `ros2_control`.
 
 ---
 
@@ -215,6 +285,8 @@ Mappatura gesto → comando del braccio: da definire.
 - [ ] Prima di rendere il repo **pubblico**: confermare che sia privato nel frattempo e
       decidere l'email dei commit (noreply); cambiarla nei commit già fatti richiede di
       riscrivere la cronologia e un push forzato
+- [ ] README: aggiornare con il braccio RRR a tappe e con il modello a 19 classi quando i
+      risultati e i parametri sono confermati (oggi parla ancora di 5 classi e di 6 DOF)
 - [ ] Gif/video breve del sistema in azione (la demo su video annotato esiste già:
       `live_demo.py`; da convertire in gif evitando di mostrare il volto)
 - [ ] Collegamento del repository su LinkedIn/CV, con una riga che spiega
@@ -224,8 +296,10 @@ Mappatura gesto → comando del braccio: da definire.
 
 ## Note aperte
 
-- Mappatura esatta gesto → direzione/azione del braccio (5 gesti disponibili)
-- Parametri DH: braccio inventato da me o ispirato a un modello reale
+- Mappatura esatta gesto → direzione/azione del braccio (19 classi addestrate: si sceglie
+  dalla matrice di confusione, evitando gesti confondibili su versi opposti)
+- Valori definitivi di `h`, `L1`, `L2` e dei limiti dei giunti (θ2 fino a 90° o oltre, θ1 ±90°
+  o giro completo)
 - Webcam reale (accesso da WSL2 non immediato) o camera simulata in Gazebo
 - Come ottenere il ritaglio della mano oltre la regione fissa: detector leggero o
   segmentazione
