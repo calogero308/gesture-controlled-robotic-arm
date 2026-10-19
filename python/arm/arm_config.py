@@ -45,3 +45,6 @@ THETA3_MAX = math.radians(-5)
 # --- Margini di sicurezza (m) ---
 # Altezza minima della punta (e del gomito) sopra il piano del tavolo
 Z_MIN = 0.01
+
+# --- Movimento del braccio (m) ---
+STEP = 0.01 # (cm)
