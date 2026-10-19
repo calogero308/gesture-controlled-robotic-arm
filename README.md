@@ -1,12 +1,12 @@
 # Gesture-Controlled Robotic Arm with CUDA-Accelerated Perception
 
-A hand-gesture recognition pipeline whose image preprocessing runs on **CUDA kernels written from scratch**, driving a simulated **3-DOF robotic arm** whose **inverse kinematics is computed live** rather than replayed from stored poses. Recognised gestures move the end effector (up / down / left / right, plus stop). ROS2 + Gazebo, and a 6-DOF version with a spherical wrist, are the planned next stages.
+A hand-gesture recognition pipeline whose image preprocessing runs on **CUDA kernels written from scratch**, driving a simulated **3-DOF robotic arm** whose **inverse kinematics is computed live** rather than replayed from stored poses. Recognised gestures move the end effector (up / down / left / right, plus stop), **live from a webcam**. ROS2 + Gazebo, and a 6-DOF version with a spherical wrist, are the planned next stages.
 
 The project ties together three areas that are usually studied separately: systems programming in C++/CUDA, machine learning, and robotics (kinematics, ROS2).
 
 ![Arm driven by gestures recognised in a recorded video](docs/img/demo_arm.gif)
 
-*A recorded video of hand gestures drives the simulated arm. The trail is the path of the tip; when a command would take the tip outside the reachable workspace, the arm stays where it is.*
+*A recorded video of hand gestures drives the simulated arm (the live webcam version works the same way). The trail is the path of the tip; when a command would take the tip outside the reachable workspace, the arm stays where it is.*
 
 ## Status
 
@@ -17,9 +17,10 @@ The project ties together three areas that are usually studied separately: syste
 | Gesture classifier (19 classes, MobileNetV2 fine-tuned) | Done — 94.9 % validation accuracy; 5 gestures enabled for control |
 | Fixed central ROI crop before the classifier | Done (basic: the hand must be inside the box) |
 | Temporal gesture filter (majority vote over a window) | Done |
-| Video demo (file source, annotated output) | Done; live webcam not tested (WSL2 does not see it) |
+| Video demo (file source, annotated output) | Done |
+| Live webcam (MJPEG stream from a small Windows server, read by WSL2) | Done |
 | 3-DOF RRR arm: analytic forward/inverse kinematics, joint limits, tests | Done |
-| Gesture → command → arm control loop, matplotlib simulation | Done (offline, driven by a recorded video) |
+| Gesture → command → arm control loop, matplotlib simulation | Done, offline (recorded video) and real time (webcam) |
 | Real hand detector (hand anywhere in the frame) | Not started (see [Limitations](#limitations)) |
 | Arm CAD model, URDF, ROS2 nodes, Docker, Gazebo | Not started |
 | 6-DOF version with spherical wrist | Planned (stage 2) |
@@ -57,6 +58,11 @@ inverse kinematics   (θ1, θ2, θ3), or None if the target is unreachable → t
       │
       ▼
 arm drawn in 3D and in side view (matplotlib)    [planned] URDF + Gazebo + ROS2
+```
+
+In the live version the frames come from a webcam streamed by Windows (see [Running it](#running-it)); the arm window is a separate process so that OpenCV and matplotlib each have their own event loop.
+
+```
 ```
 
 The CUDA library is compiled to a shared object and called from Python through `ctypes`; `python/src/cuda_preprocess.py` validates the input (dtype, shape, contiguity) before handing raw pointers to the GPU.
@@ -112,8 +118,10 @@ Raw per-frame predictions flicker, especially while the hand moves between gestu
 
 ```bash
 python3 live_demo.py ../../data/videos/gesti1.mp4   # annotated video (from python/src)
-python3 live_demo.py 0                              # webcam index (not tested)
+python3 live_demo.py http://IP:8080/video --show --nosave   # live webcam stream, window only
 ```
+
+Options: `--show` opens a window (q to quit), `--nosave` skips writing `out.mp4`.
 
 ### Arm: kinematics
 
@@ -159,20 +167,25 @@ The result is rejected (`None`) if any joint is outside its limits or the tip wo
 | `rock` | right |
 | `palm` | stop |
 
-Any other gesture, or no stable gesture, means no command. Each command moves the target tip position by a fixed step (`STEP`, 1 cm); inverse kinematics turns the target into joint angles, and if the target is unreachable the arm simply stays where it was. `simulate.py` draws the arm in 3D and in side view, with the joint angles and the state of each command.
+Any other gesture, or no stable gesture, means no command. Each command moves the target tip position by a fixed step (`STEP`, 1 cm); inverse kinematics turns the target into joint angles, and if the target is unreachable the arm simply stays where it was. `arm_state.py` holds the control step (gesture → command → inverse kinematics → new state, no graphics); `simulate.py` draws the arm in 3D and in side view, with the joint angles and the state of each command.
 
 ```bash
 # from python/control
 python3 demo_arm.py ../../data/videos/gesti1.mp4          # video → gestures → arm, saves demo_arm.gif
 python3 simulate.py --gif out.gif                          # scripted sequence of gestures, no video
+python3 live_arm.py http://IP:8080/video                   # live: webcam → gestures → arm (see Running it)
 ```
+
+### Live webcam
+
+WSL2's default kernel does not expose USB cameras (no V4L2/UVC), so `tools/webcam_server.py` runs on Windows, grabs the webcam and serves it as an MJPEG stream (`http://<windows-ip>:8080/video`, only the latest frame is kept so latency does not build up). WSL reads it with OpenCV like any other video source. `live_arm.py` runs the full chain on each frame and applies the stable gesture to the arm every 3rd frame; the arm is drawn in a second window (`arm_viewer.py`, separate process). It prints the average processing time per frame on exit.
 
 ## Limitations
 
 - **Hand must be in the ROI.** The crop is a fixed central box, not a detector: a hand outside it is not seen. A hand detector (a lightweight pretrained one, or my own) is the planned replacement. Full frames without cropping are less reliable, especially on the confusable pairs (for example `like` read as `call`).
-- **The arm is only simulated, and offline.** The demo processes a recorded video and then animates the result; there is no real-time loop yet, and no CAD model, URDF, ROS2 nodes or Gazebo.
-- **Live webcam not tested.** WSL2 does not expose the webcam; development used recorded video. Options: USB passthrough, or streaming frames from Windows.
-- **Arm speed depends on the command rate.** A command is applied every 3rd frame (about 10 steps per second at 30 fps, 10 cm/s with a 1 cm step); in a real-time loop the step or the rate would need tuning.
+- **The arm is only simulated** (matplotlib): no CAD model, URDF, ROS2 nodes or Gazebo yet.
+- **Live webcam goes through a Windows server.** It needs `tools/webcam_server.py` running on Windows, and the Windows IP seen from WSL can change after a WSL restart. Latency of the stream was not measured systematically.
+- **Arm speed depends on the command rate.** A command is applied every 3rd frame (about 10 steps per second at 30 fps, 10 cm/s with a 1 cm step); `STEP` and `EVERY_N` were not tuned systematically.
 - **Only 5 of the 19 classes are used for control**, and the gesture set was chosen from validation statistics, not from user studies.
 - **Filter parameters** come from one video and have not been validated on more data.
 - **Resize is not bit-identical** to torchvision's antialiased bilinear (see above); accuracy impact on the validation set is within noise, but not zero.
@@ -207,8 +220,12 @@ python/arm/             robotic arm
   viz.py                joint positions for drawing
 python/control/         from gestures to arm motion
   gesture_to_command.py gesture → direction, direction → new tip position
-  simulate.py           animation of the arm (3D + side view)
-  demo_arm.py           video → stable gestures → arm animation
+  arm_state.py          control step: gesture → command → inverse kinematics → new state
+  simulate.py           animation of the arm (3D + side view), ArmView drawing class
+  demo_arm.py           video → stable gestures → arm animation (GIF)
+  arm_viewer.py         arm window in a separate process, fed by live_arm.py
+  live_arm.py           live: webcam/video → gestures → arm in real time
+tools/                  webcam_server.py: Windows MJPEG webcam server for WSL2
 python/scripts/         dataset download
 docs/                   roadmap, arm design notes (braccio-rrr.md), images
 ```
@@ -247,11 +264,29 @@ cd ../arm && python3 test_kinematics.py
 cd ../control && python3 demo_arm.py path/to/video.mp4
 ```
 
+### Live demo with the webcam (Windows + WSL2)
+
+```bash
+# 1. Windows (PowerShell, from the project folder; needs `pip install opencv-python`). Leave it running.
+python tools\webcam_server.py            # optional argument: camera index or a video file
+#    allow private networks if the Windows firewall asks
+
+# 2. WSL: Windows IP as seen from WSL (it can change after a WSL restart)
+ip route show | grep -i default | awk '{print $3}'
+
+# 3. WSL: check the stream, then start the live demo
+python3 -c "import cv2; c=cv2.VideoCapture('http://IP:8080/video'); print(c.isOpened(), c.read()[0])"   # True True
+cd python/control
+python3 live_arm.py http://IP:8080/video            # webcam window + arm window
+```
+
+Quit with `q` in the webcam window, by closing the arm window, or with Ctrl+C. Gestures: `like` up, `fist` down, `peace` left, `rock` right, `palm` stop; keep the hand inside the box. `--nowindow` shows only the arm.
+
 ## Planned work
 
 1. Arm CAD model, URDF with the dimensions already in `arm_config.py`, and a Docker image with ROS2 Jazzy and Gazebo; ROS2 nodes for camera, inference and arm control.
 2. Stage 2: 6-DOF arm with a spherical wrist (position/orientation decoupling for the analytic inverse kinematics).
-3. Real-time loop with a webcam, and a hand detector to replace the fixed ROI; validation of the temporal filter on more video.
+3. A hand detector to replace the fixed ROI; tuning of `STEP`/`EVERY_N`; validation of the temporal filter on more video.
 4. Version 2: a Reinforcement Learning component for the arm (to be defined), planned to coincide with a Reinforcement Learning course. Possible hardware: a 3D-printed arm driven by an Arduino (servos powered externally, common ground).
 
 ## Scope note

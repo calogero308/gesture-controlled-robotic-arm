@@ -1,7 +1,7 @@
 """
 Simulazione del braccio RRR con matplotlib.
 
-Una sequenza di gesti (scritta a mano, al posto del video) viene tradotta in
+Una sequenza di gesti (scritta a mano, o presa da un video) viene tradotta in
 comandi; ogni comando sposta la punta di un passo, la cinematica inversa
 calcola gli angoli e il braccio viene disegnato in 3D e di profilo.
 
@@ -14,21 +14,14 @@ Esecuzione (da python/control):
 
 import math
 import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
-# il modulo del braccio sta in python/arm
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "arm"))
-
-from arm_config import H, L1, L2
-from kinematics import forward_kinematics, inverse_kinematics
+from arm_state import HOME_ANGLES, initial_state, step
 from viz import joint_positions
-from gesture_to_command import gesture_to_command, apply_command
 
 # --- Parametri della simulazione ---
-HOME_ANGLES = (0.0, math.radians(45), math.radians(-90))   # posizione di partenza
 SUBSTEPS = 3          # fotogrammi di interpolazione tra un comando e il successivo
 FPS = 15
 
@@ -44,26 +37,13 @@ SEQUENCE = (
 )
 
 
-def run_sequence(gestures, home_angles):
+def run_sequence(gestures, home_angles=HOME_ANGLES):
     """Applica i gesti uno alla volta. Restituisce la lista degli stati, senza disegnare."""
-    angles = home_angles
-    pos = forward_kinematics(*angles)
-    states = [dict(gesture=None, command=None, pos=pos, angles=angles, status="posizione iniziale")]
-
+    state = initial_state(home_angles)
+    states = [state]
     for g in gestures:
-        cmd = gesture_to_command(g)
-        if cmd is None:
-            status = "nessun comando"
-        elif cmd == (0, 0, 0):
-            status = "stop"
-        else:
-            target = apply_command(pos, cmd)
-            soluzione = inverse_kinematics(*target)
-            if soluzione is None:
-                status = "BLOCCATO: punto non raggiungibile"
-            else:
-                pos, angles, status = target, soluzione, "ok"
-        states.append(dict(gesture=g, command=cmd, pos=pos, angles=angles, status=status))
+        state = step(state, g)
+        states.append(state)
     return states
 
 
@@ -106,7 +86,43 @@ def build_figure():
     ax_side.grid(alpha=0.25)
     ax_side.set_title("vista di profilo")
 
+    fig.subplots_adjust(bottom=0.20, top=0.92, left=0.0, right=0.97, wspace=0.08)
     return fig, ax3d, ax_side
+
+
+class ArmView:
+    """Finestra con il braccio: draw(angoli, stato) lo ridisegna. Serve sia all'animazione sia al dal vivo."""
+
+    def __init__(self):
+        self.fig, self.ax3d, self.ax_side = build_figure()
+        self.arm3d, = self.ax3d.plot([], [], [], "-o", color="tab:blue", lw=4, ms=7)
+        self.trail3d, = self.ax3d.plot([], [], [], "-", color="tab:orange", lw=1.2)
+        self.arm_side, = self.ax_side.plot([], [], "-o", color="tab:blue", lw=4, ms=7)
+        self.hud = self.fig.text(0.02, 0.02, "", family="monospace", fontsize=9, va="bottom")
+        self.trail = []
+
+    def draw(self, angles, state):
+        pts = joint_positions(*angles)
+        xs, ys, zs = zip(*pts)
+        self.arm3d.set_data(xs, ys)
+        self.arm3d.set_3d_properties(zs)
+
+        self.trail.append(pts[-1])
+        tx, ty, tz = zip(*self.trail)
+        self.trail3d.set_data(tx, ty)
+        self.trail3d.set_3d_properties(tz)
+
+        rs = [math.hypot(x, y) for x, y, _ in pts]
+        self.arm_side.set_data(rs, zs)
+
+        t1, t2, t3 = (math.degrees(a) for a in angles)
+        x, y, z = pts[-1]
+        self.hud.set_text(
+            f"gesto: {str(state['gesture']):<6}  comando: {str(state['command']):<11}  {state['status']}\n"
+            f"theta1={t1:6.1f}  theta2={t2:6.1f}  theta3={t3:6.1f} gradi    "
+            f"punta: x={x:.3f} y={y:.3f} z={z:.3f} m"
+        )
+        return self.arm3d, self.trail3d, self.arm_side, self.hud
 
 
 def animate(sequence=SEQUENCE, gif_path=None, substeps=SUBSTEPS):
@@ -115,42 +131,12 @@ def animate(sequence=SEQUENCE, gif_path=None, substeps=SUBSTEPS):
     substeps = fotogrammi di interpolazione per comando: per sequenze lunghe (video) usa 1,
     altrimenti la GIF diventa enorme.
     """
-    states = run_sequence(sequence, HOME_ANGLES)
+    states = run_sequence(sequence)
     frames = interpolate(states, substeps)
-    fig, ax3d, ax_side = build_figure()
+    view = ArmView()
 
-    arm3d, = ax3d.plot([], [], [], "-o", color="tab:blue", lw=4, ms=7)
-    trail3d, = ax3d.plot([], [], [], "-", color="tab:orange", lw=1.2)
-    arm_side, = ax_side.plot([], [], "-o", color="tab:blue", lw=4, ms=7)
-    hud = fig.text(0.02, 0.02, "", family="monospace", fontsize=9, va="bottom")
-    trail = []
-
-    def update(i):
-        angles, state = frames[i]
-        pts = joint_positions(*angles)
-        xs, ys, zs = zip(*pts)
-        arm3d.set_data(xs, ys)
-        arm3d.set_3d_properties(zs)
-
-        trail.append(pts[-1])
-        tx, ty, tz = zip(*trail)
-        trail3d.set_data(tx, ty)
-        trail3d.set_3d_properties(tz)
-
-        rs = [math.hypot(x, y) for x, y, _ in pts]
-        arm_side.set_data(rs, zs)
-
-        t1, t2, t3 = (math.degrees(a) for a in angles)
-        x, y, z = pts[-1]
-        hud.set_text(
-            f"gesto: {str(state['gesture']):<6}  comando: {str(state['command']):<11}  {state['status']}\n"
-            f"theta1={t1:6.1f}  theta2={t2:6.1f}  theta3={t3:6.1f} gradi    "
-            f"punta: x={x:.3f} y={y:.3f} z={z:.3f} m"
-        )
-        return arm3d, trail3d, arm_side, hud
-
-    anim = FuncAnimation(fig, update, frames=len(frames), interval=1000 / FPS, blit=False, repeat=False)
-    fig.subplots_adjust(bottom=0.20, top=0.92, left=0.0, right=0.97, wspace=0.08)
+    anim = FuncAnimation(view.fig, lambda i: view.draw(*frames[i]), frames=len(frames),
+                         interval=1000 / FPS, blit=False, repeat=False)
 
     if gif_path:
         anim.save(gif_path, writer=PillowWriter(fps=FPS), dpi=70)
