@@ -67,12 +67,12 @@ def run_sequence(gestures, home_angles):
     return states
 
 
-def interpolate(states):
+def interpolate(states, substeps=SUBSTEPS):
     """Fotogrammi intermedi tra due stati consecutivi (solo per fluidità del disegno)."""
     frames = []
     for prev, cur in zip(states, states[1:]):
-        for k in range(1, SUBSTEPS + 1):
-            t = k / SUBSTEPS
+        for k in range(1, substeps + 1):
+            t = k / substeps
             angles = tuple(a + (b - a) * t for a, b in zip(prev["angles"], cur["angles"]))
             frames.append((angles, cur))
     return frames
@@ -109,9 +109,14 @@ def build_figure():
     return fig, ax3d, ax_side
 
 
-def main():
-    states = run_sequence(SEQUENCE, HOME_ANGLES)
-    frames = interpolate(states)
+def animate(sequence=SEQUENCE, gif_path=None, substeps=SUBSTEPS):
+    """Esegue la sequenza di gesti e disegna il braccio. Con gif_path salva una GIF, altrimenti apre la finestra.
+
+    substeps = fotogrammi di interpolazione per comando: per sequenze lunghe (video) usa 1,
+    altrimenti la GIF diventa enorme.
+    """
+    states = run_sequence(sequence, HOME_ANGLES)
+    frames = interpolate(states, substeps)
     fig, ax3d, ax_side = build_figure()
 
     arm3d, = ax3d.plot([], [], [], "-o", color="tab:blue", lw=4, ms=7)
@@ -147,12 +152,16 @@ def main():
     anim = FuncAnimation(fig, update, frames=len(frames), interval=1000 / FPS, blit=False, repeat=False)
     fig.subplots_adjust(bottom=0.20, top=0.92, left=0.0, right=0.97, wspace=0.08)
 
-    if "--gif" in sys.argv:
-        out = sys.argv[sys.argv.index("--gif") + 1]
-        anim.save(out, writer=PillowWriter(fps=FPS), dpi=70)
-        print("GIF salvata in", out)
+    if gif_path:
+        anim.save(gif_path, writer=PillowWriter(fps=FPS), dpi=70)
+        print("GIF salvata in", gif_path)
     else:
         plt.show()
+
+
+def main():
+    gif_path = sys.argv[sys.argv.index("--gif") + 1] if "--gif" in sys.argv else None
+    animate(SEQUENCE, gif_path)
 
 
 if __name__ == "__main__":
