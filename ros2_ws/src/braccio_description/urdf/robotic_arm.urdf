@@ -1,0 +1,110 @@
+<?xml version="1.0" ?>
+<robot name="my_robotic_arm">
+
+<link name="world"/>
+
+<joint name="world_to_base_link" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+</joint>
+
+<link name="base_link">
+    <visual>
+        <origin xyz="0 0 0.01" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.10 0.10 0.02"/>
+        </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0 0 0.01" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.10 0.10 0.02"/>
+        </geometry>
+    </collision>
+</link>
+
+<joint name="base_to_shoulder" type="revolute">
+    <parent link="base_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.5708" upper="1.5708" effort="10" velocity="1"/>
+</joint>
+
+<link name="shoulder_link">
+    <visual>
+        <origin xyz="0 0 0.045" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.02 0.02 0.09"/>
+        </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0 0 0.045" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.02 0.02 0.09"/>
+        </geometry>
+    </collision>
+</link>
+
+<joint name="shoulder_to_upper" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="upper_arm_link"/>
+    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0" upper="1.5708" effort="10" velocity="1"/>
+</joint>
+
+<link name="upper_arm_link">
+    <visual>
+        <origin xyz="0.08 0 0" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.16 0.02 0.02"/>
+        </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0.08 0 0" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.16 0.02 0.02"/>
+        </geometry>
+    </collision>
+</link>
+
+<joint name="upper_arm_to_forearm" type="revolute">
+    <parent link="upper_arm_link"/>
+    <child link="forearm_link"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="-2.618" upper="-0.0873" effort="10" velocity="1"/>
+</joint>
+
+<link name="forearm_link">
+    <visual>
+        <origin xyz="0.07 0 0" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.14 0.02 0.02"/>
+        </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0.07 0 0" rpy="0 0 0"/>
+        <geometry>
+            <box size="0.14 0.02 0.02"/>
+        </geometry>
+    </collision>
+</link>
+
+<joint name="tip_joint" type="fixed">
+    <parent link="forearm_link"/>
+    <child link="tip_link"/>
+    <origin xyz="0.14 0 0" rpy="0 0 0"/>
+</joint>
+
+<link name="tip_link">
+    <visual>
+        <geometry>
+            <sphere radius="0.01"/>
+        </geometry>
+    </visual>
+</link>
+
+</robot>
