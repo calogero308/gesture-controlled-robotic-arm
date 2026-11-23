@@ -12,7 +12,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -20,9 +20,8 @@ DEFAULT_REPO = "/mnt/c/Users/calog/Desktop/Secret_tasks/robot-gesti-cuda"
 
 
 def generate_launch_description():
-    urdf_path = os.path.join(get_package_share_directory("braccio_description"), "urdf", "robotic_arm.urdf")
-    with open(urdf_path) as f:
-        robot_description = f.read()
+    urdf_path = os.path.join(get_package_share_directory("braccio_description"), "urdf", "robotic_arm.urdf.xacro")
+    robot_description = ParameterValue(Command(["xacro ", urdf_path]), value_type=str)
     rviz_config = os.path.join(get_package_share_directory("braccio_bringup"), "rviz", "live.rviz")
 
     source = LaunchConfiguration("source")

@@ -14,7 +14,7 @@ from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64MultiArray
 
 DEFAULT_REPO = "/mnt/c/Users/calog/Desktop/Secret_tasks/robot-gesti-cuda"
 # i nomi devono essere identici a quelli dell'URDF
@@ -27,6 +27,7 @@ class ArmControlNode(Node):
         self.declare_parameter("repo_dir", DEFAULT_REPO)
         self.declare_parameter("rate", 10.0)               # comandi al secondo (10 passi/s = 10 cm/s con STEP 1 cm)
         self.declare_parameter("gesture_timeout", 0.5)     # secondi
+        self.declare_parameter("sim", False)
         repo = Path(str(self.get_parameter("repo_dir").value))
         rate = float(self.get_parameter("rate").value)
         self.timeout = float(self.get_parameter("gesture_timeout").value)
@@ -41,8 +42,10 @@ class ArmControlNode(Node):
 
         self.subscription = self.create_subscription(String, "/gesture", self.on_gesture, 10)
         self.publisher = self.create_publisher(JointState, "/joint_states", 10)
+        self.cmd_publisher = self.create_publisher(Float64MultiArray, "/arm_position_controller/commands", 10)
         self.timer = self.create_timer(1.0 / rate, self.tick)
         self.get_logger().info("arm_control_node pronto")
+        self.sim = self.get_parameter("sim").value
 
     def on_gesture(self, msg):
         self.gesture = msg.data or None                    # stringa vuota = nessun gesto
@@ -63,11 +66,16 @@ class ArmControlNode(Node):
         if status != previous_status and status.startswith("BLOCCATO"):
             self.get_logger().warn(status)
 
-        msg = JointState()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.name = JOINT_NAMES
-        msg.position = [float(a) for a in self.state["angles"]]
-        self.publisher.publish(msg)
+        if self.sim:
+            msg = Float64MultiArray()
+            msg.data = [float(a) for a in self.state["angles"]]
+            self.cmd_publisher.publish(msg)
+        else:
+            msg = JointState()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.name = JOINT_NAMES
+            msg.position = [float(a) for a in self.state["angles"]]
+            self.publisher.publish(msg)
 
 
 def main(args=None):

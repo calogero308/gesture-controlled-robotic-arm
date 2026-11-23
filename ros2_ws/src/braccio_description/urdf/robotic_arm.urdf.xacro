@@ -9,6 +9,7 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
 </joint>
 
+<!-- base_link: origine = centro del fondo della base (sc_base in SolidWorks) -->
 <link name="base_link">
     <inertial>
         <mass value="0.02"/>
@@ -16,9 +17,9 @@
         <inertia ixx="0.00017" ixy="0" ixz="0" iyy="0.00017" iyz="0" izz="0.00033"/>
     </inertial>
     <visual>
-        <origin xyz="0 0 0.01" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
         <geometry>
-            <box size="0.10 0.10 0.02"/>
+            <mesh filename="package://braccio_description/meshes/base.stl" scale="0.001 0.001 0.001"/>
         </geometry>
     </visual>
     <collision>
@@ -37,6 +38,7 @@
     <limit lower="-1.5708" upper="1.5708" effort="10" velocity="1"/>
 </joint>
 
+<!-- shoulder_link = torretta (piatto + colonna + servo spalla), stesso frame di sc_base -->
 <link name="shoulder_link">
     <inertial>
         <mass value="0.08"/>
@@ -44,9 +46,9 @@
         <inertia ixx="0.000057" ixy="0" ixz="0" iyy="0.000057" iyz="0" izz="0.0000054"/>
     </inertial>
     <visual>
-        <origin xyz="0 0 0.045" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
         <geometry>
-            <box size="0.02 0.02 0.09"/>
+            <mesh filename="package://braccio_description/meshes/torretta.stl" scale="0.001 0.001 0.001"/>
         </geometry>
     </visual>
     <collision>
@@ -57,14 +59,16 @@
     </collision>
 </link>
 
+<!-- asse spalla: 90 mm sopra il fondo, quasi sull'asse base (misure SolidWorks) -->
 <joint name="shoulder_to_upper" type="revolute">
     <parent link="shoulder_link"/>
     <child link="upper_arm_link"/>
-    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    <origin xyz="-0.0005 -0.007 0.090" rpy="0 0 0"/>
     <axis xyz="0 -1 0"/>
     <limit lower="0" upper="1.5708" effort="10" velocity="1"/>
 </joint>
 
+<!-- upper_arm_link = braccio + servo gomito, frame = sc_spalla -->
 <link name="upper_arm_link">
     <inertial>
         <mass value="0.06"/>
@@ -72,9 +76,9 @@
         <inertia ixx="0.000004" ixy="0" ixz="0" iyy="0.00013" iyz="0" izz="0.00013"/>
     </inertial>
     <visual>
-        <origin xyz="0.08 0 0" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
         <geometry>
-            <box size="0.16 0.02 0.02"/>
+            <mesh filename="package://braccio_description/meshes/braccio.stl" scale="0.001 0.001 0.001"/>
         </geometry>
     </visual>
     <collision>
@@ -85,14 +89,16 @@
     </collision>
 </link>
 
+<!-- gomito: 160 mm dalla spalla, 31.3 mm di offset laterale (misure SolidWorks) -->
 <joint name="upper_arm_to_forearm" type="revolute">
     <parent link="upper_arm_link"/>
     <child link="forearm_link"/>
-    <origin xyz="0.16 0 0" rpy="0 0 0"/>
+    <origin xyz="0.160 0.0313 0" rpy="0 0 0"/>
     <axis xyz="0 -1 0"/>
     <limit lower="-2.618" upper="-0.0873" effort="10" velocity="1"/>
 </joint>
 
+<!-- forearm_link = avambraccio + punta, frame = sc_gomito -->
 <link name="forearm_link">
     <inertial>
         <mass value="0.04"/>
@@ -100,9 +106,9 @@
         <inertia ixx="0.0000027" ixy="0" ixz="0" iyy="0.000066" iyz="0" izz="0.000066"/>
     </inertial>
     <visual>
-        <origin xyz="0.07 0 0" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
         <geometry>
-            <box size="0.14 0.02 0.02"/>
+            <mesh filename="package://braccio_description/meshes/avambraccio.stl" scale="0.001 0.001 0.001"/>
         </geometry>
     </visual>
     <collision>
@@ -113,6 +119,7 @@
     </collision>
 </link>
 
+<!-- TODO: la punta vera e' spostata lateralmente (da misurare in SolidWorks) -->
 <joint name="tip_joint" type="fixed">
     <parent link="forearm_link"/>
     <child link="tip_link"/>
@@ -145,7 +152,7 @@
         <command_interface name="position"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
-    </joint>    
+    </joint>
 </ros2_control>
 
 <gazebo>

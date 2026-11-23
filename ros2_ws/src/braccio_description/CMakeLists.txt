@@ -24,7 +24,7 @@ if(BUILD_TESTING)
 endif()
 
 ### added
-install(DIRECTORY urdf launch config rviz
+install(DIRECTORY urdf launch config rviz meshes
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()
