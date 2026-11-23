@@ -4,7 +4,7 @@
   <name>braccio_control</name>
   <version>0.1.0</version>
   <description>Controllo: dal gesto stabile agli angoli dei giunti (cinematica inversa)</description>
-  <maintainer email="todo@example.com">Calogero</maintainer>
+  <maintainer email="75779763+calogero308@users.noreply.github.com">Calogero</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

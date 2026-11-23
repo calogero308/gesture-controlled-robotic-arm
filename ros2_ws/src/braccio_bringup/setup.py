@@ -17,7 +17,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Calogero",
-    maintainer_email="todo@example.com",
+    maintainer_email="75779763+calogero308@users.noreply.github.com",
     description="Launch file del sistema completo",
     license="Apache-2.0",
     entry_points={"console_scripts": []},

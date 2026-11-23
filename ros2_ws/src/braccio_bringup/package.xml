@@ -4,7 +4,7 @@
   <name>braccio_bringup</name>
   <version>0.1.0</version>
   <description>Launch file che avviano l'intero sistema (percezione, controllo, visualizzazione)</description>
-  <maintainer email="todo@example.com">Calogero</maintainer>
+  <maintainer email="75779763+calogero308@users.noreply.github.com">Calogero</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>braccio_description</exec_depend>
