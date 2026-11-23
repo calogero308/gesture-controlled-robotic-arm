@@ -19,6 +19,7 @@ from compare_preprocessing import cuda_pipeline, probabilities, torchvision_prep
 from dataset import full_val, val_indices
 from inference import load_model
 
+# Seed di generazione per ripetibilità
 SAMPLE_SEED = 0
 
 
@@ -40,6 +41,7 @@ def main():
         path, label = full_val.samples[i]            # (percorso, indice classe vera)
         image = Image.open(path).convert("RGB")
 
+        # Chiamata alle due catene di preprocessing
         p_tv = probabilities(model, device, torchvision_preprocess(image))
         p_cuda = probabilities(model, device, cuda_pipeline(image))
 

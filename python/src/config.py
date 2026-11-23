@@ -41,7 +41,7 @@ NUM_CLASSES = len(CLASSES)
 # --- Preprocessing ---
 # MobileNetV2 (pretrained su ImageNet) si aspetta input 224x224 normalizzati con
 # la media/deviazione standard di ImageNet: NON sono valori a piacere, sono quelli
-# con cui il backbone è stato allenato. Training e inferenza devono usare gli stessi.
+# con cui la backbone è stata allenata. Training e inferenza devono usare gli stessi.
 IMAGE_SIZE = 224
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]

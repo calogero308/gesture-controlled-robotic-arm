@@ -41,9 +41,10 @@ def main():
     # che combinano le feature in concetti di alto livello. Gli strati iniziali (bordi,
     # texture) restano congelati perché sono generici.
     # Va fatto PRIMA di creare l'optimizer, che legge requires_grad a quel momento.
+    # Blocchi che vanno dal 15 al 18 -> verranno allenati (fine tuning)
     for param in model.features[15:].parameters():
         param.requires_grad = True
-
+    # Loss -> CrossEntropy classificazione multiclasse
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam([
         {"params": model.features[15:].parameters(), "lr": LR_BACKBONE},

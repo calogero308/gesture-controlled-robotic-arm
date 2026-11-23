@@ -18,7 +18,9 @@ def main():
 
     # pretrained=False: non serve scaricare i pesi ImageNet, li sovrascrive il checkpoint.
     model = build_model(pretrained=False)
+    # carica il modello salvato
     model.load_state_dict(torch.load(BEST_MODEL_PATH, map_location=device))
+    # setta il device
     model = model.to(device)
     model.eval()
 
@@ -28,6 +30,7 @@ def main():
     # Matrice di confusione: riga = classe vera, colonna = classe predetta.
     confusion = torch.zeros(num_classes, num_classes, dtype=torch.int64)
 
+    # Ciclo di evaluation
     with torch.no_grad():
         for images, labels in val_loader:
             images = images.to(device)

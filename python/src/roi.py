@@ -1,5 +1,6 @@
 import cv2
 
+# Funzione che calcola il box dove verrà inserito il gesto
 def roi_box(height, width, fraction = 0.6):
     
     # Calcolo del lato minimo
@@ -14,6 +15,7 @@ def roi_box(height, width, fraction = 0.6):
 
     return y0, x0, square_l
 
+# Ritaglia il box per passarlo al modello
 def crop_roi(frame, fraction = 0.6):
 
     # Inizializzazione delle variabili delle dimensioni

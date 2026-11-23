@@ -13,17 +13,14 @@ posizione del pixel destinazione di cui questo thread è responsabile.
 Scale factor in floating point — scaleX = srcWidth / dstWidth (cast a float, mai a int, altrimenti si 
 perde la parte decimale e il resize degenera in un semplice ritaglio).
 Mappatura verso la sorgente — srcX = (int)(idx * scaleX), srcY = (int)(idy * scaleY): moltiplicazione 
-prima in floating point, cast a intero dopo sul risultato finale — mai troncare lo scale factor a monte.
+prima in floating point, cast a intero dopo sul risultato finale.
 Controllo dei limiti — if (idx < dstWidth && idy < dstHeight): confronta le coordinate destinazione con 
 le dimensioni destinazione (non quelle sorgente, perché i thread sono mappati sull'output).
 Lettura da input — val = input[srcY * srcWidth + srcX]: conversione 2D→1D usando le coordinate sorgente 
 (srcX, srcY) e la larghezza sorgente (srcWidth).
-Scrittura su output (ultimo pezzo, da completare): stessa logica di conversione 2D→1D, ma con idx, idy 
+Scrittura su output: stessa logica di conversione 2D→1D, ma con idx, idy 
 e dstWidth.
 
-Il principio chiave da ricordare: ogni volta che converti coordinate 2D→1D, la larghezza usata nella 
-formula deve sempre corrispondere all'immagine a cui quell'indice si riferisce — mai mescolare larghezza 
-sorgente con coordinate destinazione o viceversa.
 */
 
 __global__ void resize_kernel(unsigned char *input, unsigned char *output, 
@@ -66,12 +63,10 @@ __global__ void resize_kernel(unsigned char *input, unsigned char *output,
 Riassunto del kernel normalize_kernel
 
 Obiettivo: convertire i valori dei pixel di un'immagine dal range intero 0-255 (formato standard di 
-un'immagine 8-bit) al range decimale 0.0-1.0, formato richiesto dai modelli di machine learning per 
-funzionare correttamente.
+un'immagine 8-bit) al range decimale 0.0-1.0, formato richiesto dai modelli di machine learning.
 
-Perché serve: i modelli ML (quello che userai nella Fase 4 per il riconoscimento gesti) sono allenati 
-aspettandosi input in un range piccolo e centrato — dare in pasto valori come 200 invece di 0.784 
-produrrebbe risultati completamente sbagliati.
+Perché serve: i modelli ML sono allenati aspettandosi input in un range piccolo e centrato — dare in pasto 
+valori come 200 invece di 0.784 produrrebbe risultati completamente sbagliati.
 
 Differenza chiave rispetto al resize: qui non c'è nessuna mappatura tra coordinate diverse — ogni thread 
 legge e scrive esattamente la stessa posizione nell'array (elaborazione "in place" concettualmente, anche 
@@ -81,18 +76,13 @@ Indicizzazione 1D, non 2D: l'immagine è trattata come un array piatto di pixel,
 riga/colonna
 Nessuna larghezza/altezza nella firma: serve solo totPixels, il numero totale di elementi
 
-Scelte sui tipi, fatte insieme:
+Scelte sui tipi:
 
 unsigned char *inPixels — i pixel in ingresso, fedeli al formato reale di un'immagine 8-bit (0-255 sta 
 comodamente in un byte)
 float *outPixels — l'output, che deve necessariamente essere decimale
-Due array separati (non un vero "in place"), perché il tipo cambia tra ingresso e uscita — non potresti 
-scrivere un float dentro un array di unsigned char
+Due array separati (non un vero "in place"), perché il tipo cambia tra ingresso e uscita.
 
-Attenzione da avere nel corpo (il pezzo che stiamo per scrivere): la divisione tra un intero (il pixel) e 
-255 rischia la stessa trappola della divisione intera vista più volte — serve assicurarsi che il calcolo
-avvenga in floating point, altrimenti il risultato tronca sempre a 0 o 1, perdendo tutta la scala 
-intermedia.
 */
 
 __global__ void normalize_kernel(unsigned char *inPixels, float *outPixels, int totPixels){
@@ -127,12 +117,8 @@ ordine diverso in memoria.
 Le due formule, il cuore del kernel:
 
 HWC: (idy * width + idx) * channels + c — ogni pixel occupa channels celle consecutive
-CHW: c * (width * height) + (idy * width + idx) — ogni canale occupa un intero blocco di width*height 
-celle
+CHW: c * (width * height) + (idy * width + idx) — ogni canale occupa un intero blocco di width*height celle
 
-Perché un ciclo for sui canali dentro il thread, invece di un terzo asse idz: con solo 3 canali, il 
-parallelismo vero conta su righe/colonne (che possono essere migliaia), non su una dimensione fissa e 
-minuscola come i canali.
 */
 
 __global__ void HWCToCHW(float *input, float *output,

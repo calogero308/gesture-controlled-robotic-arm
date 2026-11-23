@@ -1,4 +1,5 @@
 """
+
 Scarica il dataset HaGRID (classificazione, 512 px) da Hugging Face e prepara la
 struttura che si aspetta config.py:
 
@@ -14,13 +15,14 @@ Uso (da qualsiasi cartella):
 
 Note:
   - l'archivio pesa diversi GB: servono spazio su disco e tempo;
-  - lo zip scaricato resta in data/downloads/ (data/ è ignorata da git); a estrazione
+  - lo zip scaricato resta in data/downloads/ ; a estrazione
     finita si può cancellare a mano per liberare spazio;
   - se tutte le classi di config.CLASSES sono già presenti in DATASET_ROOT lo script
     non fa nulla; se uno zip è già in data/downloads/ non lo riscarica;
   - se un'estrazione viene interrotta, rilanciandolo salta i file già estratti;
   - con un tetto per classe si prendono i primi file che compaiono nello zip: la
     selezione è deterministica, non casuale.
+
 """
 
 import shutil
@@ -76,16 +78,24 @@ def extract_classes(zip_path):
     over_cap = 0
 
     with zipfile.ZipFile(zip_path) as archive:
+        # Itera dentro l'archivio
         for member in archive.infolist():
+
+            # Controlla che sia una cartella
             if member.is_dir():
                 continue
             path = Path(member.filename)
+
+            # Controlla la presenza in IMAGE_SUFFIXES
             if path.suffix.lower() not in IMAGE_SUFFIXES:
                 continue
             class_name = path.parent.name
+
+            # Controlla se viene richiesta questa determinata classe
             if class_name not in wanted:
                 continue
 
+            # Crea il target dove inserire il file
             target = DATASET_ROOT / class_name / path.name
             if target.exists():
                 already_there += 1   # estrazione ripresa, o nome file ripetuto in sottocartelle diverse
@@ -96,6 +106,7 @@ def extract_classes(zip_path):
                 over_cap += 1        # tetto raggiunto per questa classe
                 continue
 
+            # Creazione della directory e inserimento del file
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(member) as source, open(target, "wb") as destination:
                 shutil.copyfileobj(source, destination)

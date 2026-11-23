@@ -10,6 +10,9 @@ Uso:
         ...
     for frame in frames(0):                                # webcam numero 0
         ...
+
+Nel caso in questione per far funzionare la webcam ho dovuto scrivere un file esterno da WSL 
+che comunichi in rete i fotogrammi della webcam, in modo che WSL li possa leggere senza problemi.
 """
 
 import cv2
@@ -24,14 +27,17 @@ def frames(source):
     20 secondi a 30 fps in Full HD sono 600 frame da 6 MB ciascuno, cioè circa 3.6 GB.
     Così se ne tiene in memoria uno alla volta.
     """
+
     if not isinstance(source, int):
         source = str(source)                 # accetta anche oggetti Path
 
+    # Apertura del video su cattura
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
         raise RuntimeError(f"Impossibile aprire la sorgente video: {source}")
 
     try:
+        # Finchè il video/webcam non termina
         while True:
             ok, frame_bgr = capture.read()   # ok = False a fine video o camera scollegata
             if not ok:

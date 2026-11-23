@@ -31,7 +31,7 @@ OUTPUT_PATH = DATA_DIR / "videos" / "out.mp4"
 OUTPUT_FPS = 30
 WINDOW_NAME = "live_demo (q per uscire)"
 
-
+# Crea l'annotazione del gesto sopra il riquadro in rosso
 def annotate(frame_rgb, stable, gesture, confidence):
     """Restituisce un'immagine BGR (il formato di OpenCV) con riquadro verde ed etichette."""
     image = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)

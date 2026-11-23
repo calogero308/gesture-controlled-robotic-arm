@@ -24,7 +24,7 @@ from roi import crop_roi
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
-
+# Funzione che ritorna la classe vera dell'immagine passata
 def true_label(path):
     """Classe il cui nome compare nel nome del file, oppure '?' se nessuna."""
     name = path.name.lower()
@@ -39,6 +39,7 @@ def main():
     fraction = float(sys.argv[2]) if len(sys.argv) > 2 else 0.6
     paths = sorted(p for p in folder.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
 
+    # Carica il modello
     model, device = load_model()
 
     print(f"Riquadro: {fraction:.0%} del lato corto\n")
@@ -48,13 +49,14 @@ def main():
     for path in paths:
         rgb = np.array(Image.open(path).convert("RGB"))
         label = true_label(path)
-
+        # Classificazione dell'immagine completa e tagliata
         gesture_full, conf_full = classify(model, device, rgb)
         gesture_crop, conf_crop = classify(model, device, crop_roi(rgb, fraction))
 
         print(f"{path.name:<24} {label:<7} "
               f"{gesture_full:<6} ({conf_full:>6.1%})   {gesture_crop:<6} ({conf_crop:>6.1%})")
 
+        # Controllo finale di sicurezza e incremento del conteggio
         if label != "?":
             labeled += 1
             correct_full += gesture_full == label

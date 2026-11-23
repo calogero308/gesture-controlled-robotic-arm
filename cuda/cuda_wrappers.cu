@@ -142,7 +142,33 @@ __global__ void HWCToCHW(float *input, float *output,
 }
 
 
+/*
+    Preprocessing di un'immagine su GPU per il classificatore MobileNetV2.
 
+    Pipeline in tre kernel, eseguiti in sequenza sulla GPU:
+        1. resize_area_kernel : ridimensiona da (srcWidth x srcHeight) a
+                               (dstWidth x dstHeight) con interpolazione per area.
+        2. normalize_kernel   : converte uint8 -> float e normalizza <formula usata>.
+        3. HWCToCHW           : riordina i dati da HWC a CHW, il layout atteso dal modello.
+ 
+    Parametri:
+        h_input   (host)  immagine uint8 in layout HWC, srcWidth*srcHeight*channels byte
+        h_output  (host)  buffer float già allocato dal chiamante, layout CHW,
+                          dstWidth*dstHeight*channels elementi
+        channels          numero di canali (3 per RGB)
+
+    Flusso di memoria: una sola copia Host->Device all'inizio e una sola
+    Device->Host alla fine. I risultati intermedi dei kernel restano sulla GPU,
+    così si evitano trasferimenti inutili sul bus PCIe.
+ 
+    Griglia: resize e conversione di layout usano blocchi 2D 32x32 (un thread per
+    pixel di output); la normalizzazione è elementwise, quindi usa una griglia 1D
+    da 256 thread per blocco.
+ 
+    Il buffer h_output deve avere la dimensione corretta, perché non ci sono controlli.
+
+    Scritto in questo modo per far si di essere compilabile come .so e richiamabile da python
+ */
 
 extern "C" void process_image(unsigned char* h_input, float* h_output,
                             int srcWidth, int srcHeight, int channels,

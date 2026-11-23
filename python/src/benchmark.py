@@ -13,6 +13,10 @@ In coda, il tempo di un forward del modello, per mettere il preprocessing in pro
 
 Uso (da python/src):
     python3 benchmark.py
+
+Praticamente non fa altro che testare le performance su CPU e GPU
+    CPU -> Fatto con pytorch
+    GPU -> CUDA
 """
 
 import time
@@ -32,7 +36,10 @@ SIZES = {                       # nome: (larghezza, altezza)
     "640x480 (webcam)": (640, 480),
     "1920x1080 (HD)": (1920, 1080),
 }
+# Riscaldamento per evitare latenze indesiderate
 WARMUP = 10
+
+# Totale di cicli
 REPEATS = 200
 
 # Stessa pipeline del training (val_transform): è il riferimento su CPU.
@@ -66,11 +73,10 @@ def main():
 
     for name, (width, height) in SIZES.items():
         frame = rng.integers(0, 256, size=(height, width, 3), dtype=np.uint8)
-        cpu_ms = median_ms(cpu_preprocess, frame)
-        cuda_ms = median_ms(preprocess, frame)
+        cpu_ms = median_ms(cpu_preprocess, frame)   # Chiama il preprocessing
+        cuda_ms = median_ms(preprocess, frame)      # Ne calcola la mediana
         print(f"{name:<20} {cpu_ms:>10.3f} {cuda_ms:>10.3f} {cpu_ms / cuda_ms:>8.2f}x")
 
-    # --- Per proporzione: quanto costa il modello su un'immagine? ---
     model, device = load_model()
     tensor = torch.zeros(1, 3, IMAGE_SIZE, IMAGE_SIZE, device=device)
 

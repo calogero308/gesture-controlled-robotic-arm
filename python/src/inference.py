@@ -14,7 +14,7 @@ import torch
 from config import BEST_MODEL_PATH, CLASSES, IMAGE_SIZE, IMAGENET_MEAN, IMAGENET_STD
 from model import build_model
 
-
+# Carica il modello e lo rende utilizzavile
 def load_model(checkpoint_path=BEST_MODEL_PATH):
     """Ricostruisce l'architettura e carica i pesi allenati. Restituisce (modello, device)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -24,7 +24,7 @@ def load_model(checkpoint_path=BEST_MODEL_PATH):
     model.eval()                            # Dropout spento: inferenza deterministica
     return model, device
 
-
+# Funzione che effettua la predizione su un tensore passato
 def predict(model, device, tensor):
     """
     tensor: float32 di forma (3, 224, 224), già normalizzato con mean/std ImageNet.

@@ -31,7 +31,7 @@ def build_model(num_classes=NUM_CLASSES, pretrained=True):
         param.requires_grad = False
 
     # Sostituisce l'ultimo layer (1280 -> 1000 classi ImageNet) con uno nuovo.
-    # 1280 è fisso (dipende dall'architettura), num_classes dipende dal nostro problema.
+    # 1280 è fisso (dipende dall'architettura), num_classes dipende dal problema.
     # Un layer appena creato nasce con requires_grad=True: sarà allenabile.
     model.classifier[1] = nn.Linear(in_features=1280, out_features=num_classes)
 

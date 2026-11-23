@@ -18,11 +18,12 @@ SPLIT_SEED = 42        # stesso seed = stesso split a ogni esecuzione (esperimen
 # Training: include data augmentation (rotazioni leggere + variazioni di
 # luminosità/contrasto), assente invece in validation: la validation deve restare
 # "pulita" per misurare le prestazioni reali del modello su dati non alterati.
-# Niente RandomHorizontalFlip: lo scartiamo di proposito per non rischiare di
+# Niente RandomHorizontalFlip: lo scarto di proposito per non rischiare di
 # alterare gesti che dipendono dall'orientamento.
 #
 # L'augmentation lavora su immagini PIL, quindi va PRIMA di ToTensor().
 
+# Preprocessing con Data Augmentation di training
 train_transform = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),            # MobileNetV2 si aspetta 224x224
     transforms.RandomRotation(degrees=15),                  # ruota casualmente tra -15 e +15 gradi
@@ -75,7 +76,8 @@ val_dataset   = Subset(full_val, val_indices)
 # Raggruppano il dataset in batch e si occupano dello shuffle.
 # shuffle=True in training: mescola l'ordine a ogni epoca, per non imparare pattern
 # legati all'ordine delle immagini.
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+
 # shuffle=False in validation: l'ordine non cambia la metrica, e tenerlo fisso rende
 # i risultati riproducibili e ispezionabili.
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 val_loader   = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)

@@ -17,7 +17,7 @@ from cuda_preprocess import preprocess
 from inference import load_model, predict
 from roi import crop_roi, roi_box
 
-
+# Funzione che classifica l'immagine resituendo un gesto e una confidenza
 def classify(model, device, rgb):
     """rgb: array (H, W, 3) uint8 in RGB. Restituisce (gesto, confidenza)."""
 
